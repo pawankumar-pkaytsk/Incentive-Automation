@@ -1,0 +1,361 @@
+/* =====================================================================
+   Incentive Automation — calculation ENGINE
+   Implements the real HITS logic on sheet-shaped raw data.
+
+   Sheets mirrored (sample/seeded until live data is connected):
+   • hitsmaster  — seller HITs by month/year      (Seller ID, Name, Month, Year)
+   • 3weekgolive — set of 3-week HIT seller IDs    (→ counts as 1.5 HIT)
+   • handover    — col J TRUE/FALSE, GC (E), GM (F)(→ only TRUE is counted)
+   • target      — Name, Hits target, Month, Year, Role
+   • inputs      — Spend/Live, Task, Callback, Escalations (for multiplier)
+
+   LOGIC (from Logics.docx / Hypercare GC.docx):
+   Final % = Output % × Input Multiplier
+   Core GC output:  per-HIT rate by achievement band × HITs
+       ≥120% → 6.25%/HIT · 90–<120% → 4.5% · 50–<90% → 1.5% · <50% → 0
+   Hypercare output: cumulative progressive 7/8/9/11/15% then 20% flat (6th+)
+   Input multiplier from A/B/C/D bands (G/Y/R):
+       4G→1.5 · noRed+mix→1.3 · allY→1.0 · 1R→0.85 · 2-3R→0.7 · 4R→0
+   PIP: Σ(raw achievement, last 2 months) ÷ Σ(target) < 50% (GC) / 70% (GM)
+        — 3-week counts as 1 (NOT 1.5) for the PIP achievement sum.
+   ===================================================================== */
+(function () {
+  const I = window.INCENTIVE;
+  const { people, byEmail, MONTHS, rngFor, between, descendants } = I;
+
+  /* ---- Logic constants ------------------------------------------------ */
+  const CORE_BANDS = [
+    { min: 120, max: Infinity, rate: 6.25, label: '≥ 120%' },
+    { min: 90,  max: 120,      rate: 4.5,  label: '90% – <120%' },
+    { min: 50,  max: 90,       rate: 1.5,  label: '50% – <90%' },
+    { min: 0,   max: 50,       rate: 0,    label: '< 50%' },
+  ];
+  function coreBand(achPct) { return CORE_BANDS.find((b) => achPct >= b.min && achPct < b.max) || CORE_BANDS[CORE_BANDS.length - 1]; }
+
+  const HYPERCARE_RATES = [7, 8, 9, 11, 15]; // 1st..5th, then 20 flat
+  const HYPERCARE_FLAT = 20;
+  function hypercareCumulative(hits) {
+    let total = 0, remaining = hits, i = 0;
+    while (remaining > 0.0001) {
+      const rate = i < HYPERCARE_RATES.length ? HYPERCARE_RATES[i] : HYPERCARE_FLAT;
+      const take = Math.min(1, remaining);
+      total += rate * take; remaining -= take; i++;
+    }
+    return total;
+  }
+  // Per-HIT schedule for display
+  const HYPERCARE_SCHEDULE = [
+    { hit: '1st', rate: 7, cum: 7 }, { hit: '2nd', rate: 8, cum: 15 },
+    { hit: '3rd', rate: 9, cum: 24 }, { hit: '4th', rate: 11, cum: 35 },
+    { hit: '5th', rate: 15, cum: 50 }, { hit: '6th +', rate: 20, cum: null },
+  ];
+
+  /* ---- Input metric band definitions --------------------------------- */
+  const INPUTS = [
+    { key: 'A', label: 'Spend / Live',        unit: '%',  green: (v) => v > 80, yellow: (v) => v >= 70 && v <= 80, hint: '> 80% Green · 70–80% Yellow · < 70% Red' },
+    { key: 'B', label: 'Task Adherence',      unit: '%',  green: (v) => v > 90, yellow: (v) => v >= 70 && v <= 90, hint: '> 90% Green · 70–90% Yellow · < 70% Red' },
+    { key: 'C', label: 'Callback Adherence',  unit: '%',  green: (v) => v > 95, yellow: (v) => v >= 75 && v <= 95, hint: '> 95% Green · 75–95% Yellow · < 75% Red' },
+    { key: 'D', label: 'WES (Escalations)',   unit: '',   green: (v) => v < 25, yellow: (v) => v >= 25 && v <= 45, hint: '< 25 Green · 25–45 Yellow · > 45 Red', lowerBetter: true },
+  ];
+  function bandOf(input, v) { return input.green(v) ? 'green' : input.yellow(v) ? 'yellow' : 'red'; }
+  // WES = (Social Media × 3) + (SOS × 1.5) + (Internal/Sales × 1)
+  function wesScore(social, sos, internal) { return social * 3 + sos * 1.5 + internal * 1; }
+
+  /* ---- KAE strike-based incentive (₹, per doc §13) ------------------- */
+  const KAE_BASE = 6500;
+  const KAE_BANDS = [
+    { max: 0,        amount: 6500, ded: 0,   label: '0 strikes' },
+    { max: 3,        amount: 5200, ded: 20,  label: '1–3 strikes' },
+    { max: 5,        amount: 3250, ded: 50,  label: '>3–5 strikes' },
+    { max: Infinity, amount: 0,    ded: 100, label: '>5 strikes' },
+  ];
+  function kaeBand(n) { return KAE_BANDS.find((b) => n <= b.max); }
+  const STRIKE_ISSUES = ['Late seller response (>24h SLA breach)', 'Missed daily check-in call', 'Catalogue QC rejection', 'Unresolved NDR beyond 48h', 'COD confirmation delay', 'Incorrect GST invoice raised', 'Escalation not actioned', 'Pricing approval missed'];
+
+  function multiplierFromBands(bands) {
+    const g = bands.filter((b) => b === 'green').length;
+    const y = bands.filter((b) => b === 'yellow').length;
+    const r = bands.filter((b) => b === 'red').length;
+    if (r === 4) return { mult: 0.0, gcBand: 'Red', rule: 'All 4 inputs Red — incentive = 0' };
+    if (r >= 2)  return { mult: 0.70, gcBand: 'Red', rule: '2–3 Reds' };
+    if (r === 1) return { mult: 0.85, gcBand: 'Red', rule: 'Exactly 1 Red' };
+    if (g === 4) return { mult: 1.50, gcBand: 'Green', rule: 'All 4 inputs Green' };
+    if (y === 4) return { mult: 1.00, gcBand: 'Yellow', rule: 'All 4 inputs Yellow' };
+    return { mult: 1.30, gcBand: 'Yellow', rule: 'Mix of Green & Yellow, no Red' };
+  }
+
+  /* ---- Which incentive logic a person uses --------------------------- */
+  function logicFor(p) {
+    if (p.team === 'hypercare') return 'hypercare';
+    if (p.team === 'kae') return 'kae';
+    return 'core';
+  }
+
+  /* ---- Seller name pool (for demo HIT rows) -------------------------- */
+  const BRANDS = ['Urban Threads', 'Kayra Fashions', 'Nykaa Looks', 'Veda Organics', 'Trendza', 'Sole Mate', 'Glow Co', 'Denim Bay', 'Lumen Décor', 'Spice Route', 'Petals & Co', 'FitFlex', 'Aroma Wick', 'Maple Kids', 'Zen Living', 'Rangoli Crafts', 'Pure Bloom', 'Crave Snacks', 'Aura Beauty', 'Nestwell'];
+
+  /* ---- Generate one month of raw HIT rows for a GC ------------------- */
+  function genMonthRaw(p, mi) {
+    const m = MONTHS[mi];
+    const rng = rngFor(p.empId + '|' + m.key);
+    // target hits 3–6 (sample). Some months a target may be missing.
+    const target = 3 + Math.floor(rng() * 4); // 3..6
+    // achievement factor drives delivered count
+    const factor = between(rng(), 0.25, 1.7);
+    const deliveredCount = Math.max(0, Math.round(target * factor));
+    const sellers = [];
+    for (let s = 0; s < deliveredCount; s++) {
+      const r2 = rngFor(p.empId + '|' + m.key + '|' + s);
+      const threeWeek = r2() < 0.22;            // present in 3weekgolive sheet
+      const handover = r2() < 0.86;             // handover col J TRUE
+      sellers.push({
+        sellerId: 'SD' + (10000 + Math.floor(r2() * 89999)),
+        sellerName: BRANDS[Math.floor(r2() * BRANDS.length)],
+        hitMonthName: m.label.split(' ')[0],    // hitsmaster col C
+        hitYear: m.year,                        // hitsmaster col D
+        threeWeek, handover,
+      });
+    }
+    return { ...m, target, sellers };
+  }
+
+  /* ---- Compute a GC month record from raw rows ----------------------- */
+  function computeGcMonth(p, raw, logic) {
+    const counted = raw.sellers.filter((s) => s.handover); // only handover TRUE
+    const disposed = raw.sellers.filter((s) => !s.handover);
+    const threeWeekCounted = counted.filter((s) => s.threeWeek);
+    // Hypercare: 3-week go-live is NOT counted as 1.5 — every counted HIT = 1.
+    const weightedHits = logic === 'hypercare'
+      ? counted.length
+      : counted.reduce((sum, s) => sum + (s.threeWeek ? 1.5 : 1), 0);
+    const rawHits = counted.length; // for PIP (3-week counts as 1)
+    const target = raw.target;
+    const achievementPct = target > 0 ? (weightedHits / target) * 100 : null;
+
+    // Inputs A–D + multiplier apply to CORE GC only (Hypercare has no input bands).
+    let rawVals = null, bands = null, bandArr = null, mx = { mult: 1, gcBand: null, rule: null };
+    let spend = null, task = null, callback = null, escalations = null;
+    if (logic === 'kae') return computeKaeMonth(p, raw);
+    if (logic === 'core') {
+      const rng = rngFor(p.empId + '|inp|' + raw.key);
+      // WES sample: social-media, SOS, internal escalation counts (deduped per seller/day upstream)
+      const social = Math.floor(between(rng(), 0, 6));
+      const sos = Math.floor(between(rng(), 2, 16));
+      const internal = Math.floor(between(rng(), 0, 10));
+      const wes = wesScore(social, sos, internal);
+      rawVals = {
+        A: Math.round(between(rng(), 55, 98)),
+        B: Math.round(between(rng(), 60, 99)),
+        C: Math.round(between(rng(), 68, 99)),
+        D: wes,
+      };
+      bands = {}; INPUTS.filter((inp) => rawVals[inp.key] != null).forEach((inp) => { bands[inp.key] = bandOf(inp, rawVals[inp.key]); });
+      bandArr = INPUTS.map((inp) => bands[inp.key]);
+      mx = multiplierFromBands(bandArr);
+      // escalation drill rows (one per escalation; sample)
+      const escRows = [];
+      const mk = (type, n, weight) => { for (let i = 0; i < n; i++) escRows.push({ date: new Date(raw.year, raw.month - 1, 20 + (i % 22)).toISOString().slice(0, 10), type, sellerId: 'SD' + (10000 + Math.floor(rng() * 89999)), weight }); };
+      mk('Social Media Escalations', social, 3); mk('SOS', sos, 1.5); mk('Internal Escalations', internal, 1);
+      escalations = { wes, social, sos, internal, rows: escRows, band: bands.D };
+      // ---- sample day-wise spend/live + task/callback rows (for drill-downs) ----
+      const days = [], names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+      let sumSpend = 0, sumLive = 0;
+      for (let d = 0; d < 22; d++) {
+        const live = Math.round(between(rng(), 8, 26));
+        const spd = Math.max(0, Math.round(live * rawVals.A / 100 + between(rng(), -2, 2)));
+        sumSpend += spd; sumLive += live;
+        const dt = new Date(raw.year, raw.month - 1, 20 + d);
+        days.push({ date: dt.toISOString().slice(0, 10), live, spend: spd, ratio: live > 0 ? +(spd / live * 100).toFixed(1) : null });
+      }
+      spend = { netPct: sumLive > 0 ? +(sumSpend / sumLive * 100).toFixed(1) : null, sumLive, sumSpend, days, band: bands.A };
+      const mkTasks = (subs, pct) => {
+        const total = Math.round(between(rng(), 14, 40)), done = Math.round(total * pct / 100);
+        const rows = [];
+        for (let i = 0; i < total; i++) rows.push({ date: new Date(raw.year, raw.month - 1, 20 + (i % 22)).toISOString().slice(0, 10), subtask: subs[i % subs.length], status: i < done ? (i % 2 ? 'completed' : 'closed') : 'open', done: i < done });
+        return { pct, done, total, rows };
+      };
+      task = { ...mkTasks(['internal_seller_escalation_general_request', 'pre-live-call', 'troubleshoot_manual_action'], rawVals.B), band: bands.B };
+      callback = { ...mkTasks(['schedule_call', 'seller_callback_overdue_sub_task', 'seller_callback_primary_task'], rawVals.C), band: bands.C };
+    }
+
+    // Output %
+    let outputPct = 0, coreBnd = null;
+    if (achievementPct != null) {
+      if (logic === 'hypercare') {
+        outputPct = hypercareCumulative(weightedHits);
+      } else {
+        coreBnd = coreBand(achievementPct);
+        outputPct = coreBnd.rate * weightedHits;
+      }
+    }
+    // Hypercare: final = output (no input multiplier). Core: output × multiplier.
+    const multiplier = logic === 'hypercare' ? null : mx.mult;
+    const finalPct = achievementPct != null ? (logic === 'hypercare' ? outputPct : outputPct * mx.mult) : null;
+
+    return {
+      ...raw, logic,
+      counted, disposed, threeWeekCounted,
+      weightedHits, rawHits, achievementPct,
+      rawVals, bands, bandArr, multiplier, gcBand: mx.gcBand, multRule: mx.rule,
+      coreBand: coreBnd, perHitRate: coreBnd ? coreBnd.rate : null,
+      outputPct, finalPct,
+      spend, task, callback, escalations,
+      // ad-hoc (live-editable): adhocPct = relative %, adhocAbs = flat percentage-points
+      adhocPct: 0, adhocAbs: 0, adhocNote: '',
+      dataHealth: 'ok', missingFields: [],
+    };
+  }
+
+  /* ---- KAE month: ₹6,500 base, strike-based deduction (doc §13) ------ */
+  function computeKaeMonth(p, raw) {
+    const rng = rngFor(p.empId + '|kae|' + raw.key);
+    const n = Math.floor(between(rng(), 0, 7)); // 0..6 strikes (sample)
+    const strikes = [];
+    for (let i = 0; i < n; i++) {
+      strikes.push({
+        date: new Date(raw.year, raw.month - 1, 20 + Math.floor(rng() * 28)).toISOString().slice(0, 10),
+        issue: STRIKE_ISSUES[Math.floor(rng() * STRIKE_ISSUES.length)],
+      });
+    }
+    strikes.sort((a, b) => a.date < b.date ? -1 : 1);
+    const band = kaeBand(n);
+    return {
+      ...raw, logic: 'kae',
+      counted: [], disposed: [], threeWeekCounted: [], weightedHits: 0, rawHits: 0, achievementPct: null,
+      rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null,
+      coreBand: null, perHitRate: null, outputPct: null, finalPct: null,
+      spend: null, task: null, callback: null, escalations: null,
+      // KAE-specific
+      strikes, strikeCount: n, kaeBase: KAE_BASE, kaeBand: band, dedPct: band.ded, amount: band.amount,
+      adhocPct: 0, adhocAbs: 0, adhocNote: '',
+      dataHealth: 'ok', missingFields: [],
+    };
+  }
+
+  /* ---- Build all GC records first ------------------------------------ */
+  people.forEach((p) => {
+    const logic = logicFor(p);
+    p.logic = logic;
+    p.byMonth = {};
+    MONTHS.forEach((m, mi) => {
+      const raw = genMonthRaw(p, mi);
+      p.byMonth[m.key] = computeGcMonth(p, raw, logic);
+    });
+  });
+
+  /* ---- Inject data-health issues (admin alerts) ---------------------- */
+  people.forEach((p) => {
+    const cur = p.byMonth[MONTHS[MONTHS.length - 1].key];
+    const rng = rngFor('health|' + p.empId);
+    const roll = rng();
+    if (roll < 0.08) {
+      cur.dataHealth = 'missing';
+      if (rng() < 0.5) { cur.missingFields.push('Hits target not set in target sheet for ' + cur.label); cur.target = 0; cur.achievementPct = null; cur.outputPct = 0; cur.finalPct = null; }
+      else { cur.missingFields.push('Handover sheet pending — seller HITs not yet confirmed'); }
+    } else if (roll > 0.92 && p.logic === 'core') {
+      cur.dataHealth = 'attention';
+      cur.missingFields.push('Input metrics (Spend/Task/Callback) awaiting sync — multiplier provisional');
+    } else if (cur.achievementPct != null && cur.achievementPct < 50) {
+      cur.dataHealth = 'attention';
+    }
+  });
+
+  /* ---- GM rollup: a GM's HITs = sum of their reports' HITs ----------- */
+  // Managers/admins are treated as GMs (handover sheet col F = GM name).
+  people.filter((p) => p.role !== 'gc').forEach((gm) => {
+    const team = descendants(gm).filter((d) => d.role === 'gc');
+    MONTHS.forEach((m) => {
+      const recs = team.map((d) => d.byMonth[m.key]);
+      const weightedHits = recs.reduce((s, r) => s + r.weightedHits, 0);
+      const rawHits = recs.reduce((s, r) => s + r.rawHits, 0);
+      // GM target from target sheet (sample): sum of team targets × 0.9
+      const target = Math.round(recs.reduce((s, r) => s + r.target, 0) * 0.9);
+      const achievementPct = target > 0 ? (weightedHits / target) * 100 : null;
+      const gmRec = gm.byMonth[m.key];
+      gmRec.gm = { weightedHits, rawHits, target, achievementPct, teamSize: team.length };
+    });
+  });
+
+  /* ---- PIP evaluation (2 months ending at viewed period, raw hits) --- */
+  function monthsUpTo(periodKey, n = 2) {
+    const idx = MONTHS.findIndex((m) => m.key === periodKey);
+    const end = idx < 0 ? MONTHS.length - 1 : idx;
+    return MONTHS.slice(Math.max(0, end - n + 1), end + 1);
+  }
+  function evaluatePIP(p, periodKey) {
+    const months = monthsUpTo(periodKey, 2);
+    if (p.team === 'kae') return { isGM: false, threshold: null, sumAch: 0, sumTgt: 0, ratio: null, flagged: false, months: months.map((m) => m.label), na: true };
+    const isGM = p.role !== 'gc';
+    const threshold = isGM ? 70 : 50;
+    let sumAch = 0, sumTgt = 0;
+    months.forEach((m) => {
+      const rec = p.byMonth[m.key];
+      if (isGM && rec.gm) { sumAch += rec.gm.rawHits; sumTgt += rec.gm.target; }
+      else { sumAch += rec.rawHits; sumTgt += rec.target; }
+    });
+    const ratio = sumTgt > 0 ? (sumAch / sumTgt) * 100 : null;
+    const flagged = ratio != null && ratio < threshold;
+    return { isGM, threshold, sumAch, sumTgt, ratio, flagged, months: months.map((m) => m.label) };
+  }
+  /* ---- Active period + accessors (switchable in the header) ---------- */
+  let activeKey = MONTHS[MONTHS.length - 1].key;
+  const CURKEY = activeKey;
+  function cur(p) { return p.byMonth[activeKey]; }
+  function setPeriod(key) {
+    if (!MONTHS.some((m) => m.key === key)) return;
+    activeKey = key;
+    I.PERIOD = MONTHS.find((m) => m.key === key).label;
+    I.activeKey = key;
+    people.forEach((p) => { p.m = cur(p); p.pip = evaluatePIP(p, key); });
+  }
+  // initial PIP relative to latest period
+  people.forEach((p) => { p.pip = evaluatePIP(p, activeKey); p.m = cur(p); });
+
+  // Ad-hoc: adhocPct = relative % bonus, adhocAbs = flat percentage-points.
+  function finalPctWithAdhoc(p) {
+    const c = cur(p);
+    if (c.finalPct == null) return null;
+    const ap = Number(c.adhocPct) || 0, aa = Number(c.adhocAbs) || 0;
+    return c.finalPct * (1 + ap / 100) + aa;
+  }
+
+  /* ---- Aggregations -------------------------------------------------- */
+  function teamMembers(key) { return people.filter((p) => p.team === key); }
+  function avgFinalPct(list) {
+    const c = list.filter((p) => finalPctWithAdhoc(p) != null);
+    return c.length ? c.reduce((s, p) => s + finalPctWithAdhoc(p), 0) / c.length : 0;
+  }
+
+  function teamSummary(key) {
+    const mem = teamMembers(key);
+    const c = (p) => cur(p);
+    const computable = mem.filter((p) => c(p).achievementPct != null);
+    const flagged = mem.filter((p) => c(p).dataHealth !== 'ok');
+    const missing = mem.filter((p) => c(p).dataHealth === 'missing');
+    const pipCount = mem.filter((p) => p.pip.flagged).length;
+    const avgAchievement = computable.length ? Math.round(computable.reduce((s, p) => s + c(p).achievementPct, 0) / computable.length) : 0;
+    const totalHits = mem.reduce((s, p) => s + c(p).weightedHits, 0);
+    // KAE: strike-based ₹ team — surface strikes & payout instead of %/hits
+    const isKae = key === 'kae';
+    const totalStrikes = isKae ? mem.reduce((s, p) => s + (c(p).strikeCount || 0), 0) : 0;
+    const kaePayout = isKae ? mem.reduce((s, p) => s + (c(p).amount || 0), 0) : 0;
+    return { ...I.TEAMS[key], count: mem.length, flagged: flagged.length, missing: missing.length, pip: pipCount, avgFinal: avgFinalPct(mem), avgAchievement, totalHits, isKae, totalStrikes, kaePayout, members: mem };
+  }
+  function allTeamSummaries() { return I.TEAM_ORDER.map(teamSummary); }
+  function flaggedPeople() {
+    return people.filter((p) => cur(p).dataHealth !== 'ok')
+      .sort((a, b) => (cur(a).dataHealth === 'missing' ? 0 : 1) - (cur(b).dataHealth === 'missing' ? 0 : 1));
+  }
+  function pipPeople() {
+    return people.filter((p) => p.pip.flagged)
+      .sort((a, b) => (a.pip.ratio ?? 999) - (b.pip.ratio ?? 999));
+  }
+
+  /* ---- Extend the global API ----------------------------------------- */
+  Object.assign(I, {
+    CORE_BANDS, coreBand, HYPERCARE_SCHEDULE, hypercareCumulative, INPUTS, bandOf, multiplierFromBands,
+    logicFor, cur, finalPctWithAdhoc, setPeriod, monthsUpTo, activeKey,
+    teamMembers, avgFinalPct, teamSummary, allTeamSummaries, flaggedPeople, pipPeople, evaluatePIP,
+    CURKEY,
+  });
+})();

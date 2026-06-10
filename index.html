@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Incentive Automation — HITS</title>
+
+  <link rel="stylesheet" href="colors_and_type.css" />
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--sd-bg-app); }
+    #root { min-height: 100vh; }
+    button { font-family: var(--sd-font-sans); }
+    input { font-family: var(--sd-font-sans); }
+    ::selection { background: rgba(71,100,205,0.2); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: var(--sd-lowlight-1); border-radius: 999px; border: 2px solid var(--sd-bg-app); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--sd-lowlight-2); }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    /* Content is fully visible by default. Entrance animations only run once
+       the document is visible (avoids both-fill elements freezing hidden in
+       background/inactive tabs). */
+    html:not(.motion-on) *,
+    html:not(.motion-on) *::before,
+    html:not(.motion-on) *::after { animation: none !important; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+
+    /* Loading splash */
+    #boot {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: var(--sd-bg-app); z-index: 999; transition: opacity 300ms ease;
+    }
+    #boot .dot {
+      width: 12px; height: 12px; border-radius: 999px; background: var(--sd-primary);
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 0.3; transform: scale(0.8);} 50% { opacity: 1; transform: scale(1);} }
+    @keyframes sdspin { to { transform: rotate(360deg); } }
+    .sd-spin { animation: sdspin 0.7s linear infinite; }
+  </style>
+</head>
+<body>
+  <template id="__bundler_thumbnail">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx="20" fill="#eff2fa"/>
+      <rect x="30" y="28" width="40" height="9" rx="3" fill="#4764cd"/>
+      <rect x="34" y="44" width="32" height="7" rx="3" fill="#5694f2"/>
+      <rect x="38" y="58" width="24" height="6" rx="3" fill="#c8d1f0"/>
+      <circle cx="50" cy="76" r="4" fill="#4764cd"/>
+    </svg>
+  </template>
+  <div id="boot"><div class="dot"></div></div>
+  <div id="root"></div>
+
+  <!-- React + Babel (pinned) -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <!-- Data layer (plain JS) -->
+  <script>
+    /* App-Script-FREE + LIVE: Google Sign-In in the browser, then read the
+       Sheets directly with the signed-in user's own token (Sheets API).
+       No backend. Company-email sheet permissions still apply per user. */
+    window.INCENTIVE_BACKEND_URL = '';
+    window.GOOGLE_CLIENT_ID = '334591605851-5e15787uo5lu6raii82a10n1u2le3jms.apps.googleusercontent.com';
+  </script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="data.js"></script>
+  <script src="engine.js"></script>
+  <script src="live.js"></script>
+  <script src="sheets.js"></script>
+  <script>
+    // Enable entrance animations only when the document is actually visible.
+    (function () {
+      function on() {
+        if (document.visibilityState === 'visible' &&
+            !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          document.documentElement.classList.add('motion-on');
+        }
+      }
+      document.addEventListener('visibilitychange', on);
+      window.addEventListener('load', on);
+      on();
+    })();
+  </script>
+
+  <!-- Components + screens (Babel) -->
+  <script type="text/babel" src="icons.jsx"></script>
+  <script type="text/babel" src="components.jsx"></script>
+  <script type="text/babel" src="drill.jsx"></script>
+  <script type="text/babel" src="views.jsx"></script>
+  <script type="text/babel" src="person.jsx"></script>
+  <script type="text/babel" src="views2.jsx"></script>
+  <script type="text/babel" src="screens.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>

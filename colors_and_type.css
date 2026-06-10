@@ -1,0 +1,316 @@
+/* =====================================================================
+   Shopdeck Design System — colors_and_type.css
+   Source: uploads/tokens-dashboard.json (Tokens Studio for Figma format)
+   ===================================================================== */
+
+/* --- Webfont -------------------------------------------------------- */
+/* Token family: "Outfit" (variable weight 100-900).
+   Self-hosted from the official brand TTF in fonts/. */
+@font-face {
+  font-family: 'Outfit';
+  src: url('fonts/Outfit-VariableFont_wght.ttf') format('truetype-variations'),
+       url('fonts/Outfit-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ============================================================
+     COLOR PRIMITIVES
+     ============================================================ */
+
+  /* Brand */
+  --sd-primary:        #4764cd;   /* Primary action / link / brand */
+  --sd-accent-1:       #eff2fa;   /* Tinted background, hover tray */
+  --sd-accent-2:       #c8d1f0;   /* Outline on primary surfaces */
+
+  /* Text */
+  --sd-heading:        #1d2025;   /* Headlines, KPI numbers */
+  --sd-subtitle:       #555555;   /* Section labels, secondary text */
+  --sd-body:           #7e8592;   /* Body copy, helper text */
+
+  /* Neutrals */
+  --sd-lowlight-1:     #e5e5ea;   /* Dividers */
+  --sd-lowlight-2:     #c5c6c7;   /* Disabled state, mid-grey icon */
+  --sd-stroke:         #f2f2f5;   /* Borders on cards / inputs */
+  --sd-background:     #f7f7f6;   /* App canvas */
+  --sd-white:          #ffffff;   /* Card surface */
+
+  /* Highlights (campaign / status accents) */
+  --sd-highlight-1:    #ff8ba7;   /* Pink — magenta lite */
+  --sd-highlight-2:    #ffb26b;   /* Orange — warning lite */
+  --sd-highlight-3:    #ffe7ec;   /* Soft pink chip background */
+  --sd-highlight-4:    #dbefdc;   /* Soft green chip background */
+
+  /* Gradients */
+  --sd-grad-primary:   linear-gradient(90deg, #4764cd 61.46%, #5694f2 100%);
+  --sd-grad-dark:      linear-gradient(90deg, #2c3e50 0%, #3a3f49 100%);
+  --sd-grad-alert:     linear-gradient(90deg, #2c3e50 0%, #fd746c 100%);
+
+  /* ------------------------------------------------------------
+     FUNCTIONAL COLOR SCALES
+     50 / 75 — surface tints (toasts, chip backgrounds)
+     100 / 200 — borders, soft fills
+     500 — base
+     700 — pressed, text-on-light
+     900 — strong text, dark headers
+     ------------------------------------------------------------ */
+
+  /* Red */
+  --sd-red-50:   #fff2f2;
+  --sd-red-75:   #ffe6e6;
+  --sd-red-100:  #fccfcf;
+  --sd-red-200:  #faa9a7;
+  --sd-red-500:  #f44336;
+  --sd-red-700:  #d62915;
+  --sd-red-900:  #8f1300;
+
+  /* Green */
+  --sd-green-50:   #eeffed;
+  --sd-green-75:   #e2f7e1;
+  --sd-green-100:  #c8f0c7;
+  --sd-green-200:  #a5e0a4;
+  --sd-green-500:  #4caf50;
+  --sd-green-700:  #22a12a;
+  --sd-green-900:  #007d0c;
+
+  /* Yellow */
+  --sd-yellow-50:   #fffaf2;
+  --sd-yellow-75:   #fef3c6;
+  --sd-yellow-100:  #ffe9c2;
+  --sd-yellow-200:  #ffd991;
+  --sd-yellow-500:  #ffb300;
+  --sd-yellow-700:  #e0a500;
+  --sd-yellow-900:  #997500;
+
+  /* Orange */
+  --sd-orange-50:   #fff7f2;
+  --sd-orange-200:  #ffdbbf;
+  --sd-orange-500:  #ffb26b;
+  --sd-orange-700:  #e08a2d;
+  --sd-orange-900:  #995400;
+
+  /* Cyan */
+  --sd-cyan-50:   #f2ffff;
+  --sd-cyan-200:  #87e6ed;
+  --sd-cyan-500:  #00bcd4;
+  --sd-cyan-700:  #00b1cc;
+  --sd-cyan-900:  #006e87;
+
+  /* Magenta */
+  --sd-magenta-50:   #fff2f2;
+  --sd-magenta-200:  #f595ba;
+  --sd-magenta-500:  #e91e63;
+  --sd-magenta-700:  #c90e46;
+  --sd-magenta-900:  #820124;
+
+  /* Violet */
+  --sd-violet-50:   #f6f2ff;
+  --sd-violet-200:  #b6a1e3;
+  --sd-violet-500:  #673ab7;
+  --sd-violet-700:  #531ba8;
+  --sd-violet-900:  #390085;
+
+  /* ============================================================
+     SEMANTIC ALIASES — prefer these in components
+     ============================================================ */
+  --sd-fg-1:           var(--sd-heading);
+  --sd-fg-2:           var(--sd-subtitle);
+  --sd-fg-3:           var(--sd-body);
+  --sd-fg-disabled:    var(--sd-lowlight-2);
+  --sd-fg-on-primary:  var(--sd-white);
+
+  --sd-bg-app:         var(--sd-background);
+  --sd-bg-surface:     var(--sd-white);
+  --sd-bg-tinted:      var(--sd-accent-1);
+  --sd-bg-hover:       #f5f7fd;             /* derived: primary tinted hover */
+  --sd-bg-pressed:     #e7ecf8;
+
+  --sd-border:         var(--sd-stroke);
+  --sd-divider:        var(--sd-lowlight-1);
+
+  --sd-success:        var(--sd-green-700);
+  --sd-success-bg:     var(--sd-green-50);
+  --sd-success-fg:     var(--sd-green-900);
+  --sd-danger:         var(--sd-red-500);
+  --sd-danger-bg:      var(--sd-red-50);
+  --sd-danger-fg:      var(--sd-red-900);
+  --sd-warning:        var(--sd-yellow-700);
+  --sd-warning-bg:     var(--sd-yellow-50);
+  --sd-warning-fg:     var(--sd-yellow-900);
+  --sd-info:           var(--sd-cyan-700);
+  --sd-info-bg:        var(--sd-cyan-50);
+
+  /* ============================================================
+     SHADOW SYSTEM
+     ============================================================ */
+  /* Regular: standard card */
+  --sd-shadow-regular:
+      0 4px 4px 0 rgba(0,0,0,0.06),
+      0 0 10px 0 rgba(0,0,0,0.06);
+  /* Primary: primary-colored elements (CTAs, focused row) */
+  --sd-shadow-primary:
+      0 4px 4px 0 rgba(71,100,205,0.16),
+      0 0 10px 0 rgba(71,100,205,0.16);
+  /* Elevated: sidebars, app header — long, soft */
+  --sd-shadow-elevated:
+      0 4px 24px 0 rgba(0,0,0,0.04);
+  /* Soft: subtle border-replacement for L1 surface cards */
+  --sd-shadow-soft:
+      0 2px 1px 0 rgba(0,0,0,0.05),
+      0 0 1px 0 rgba(0,0,0,0.25);
+
+  /* ============================================================
+     CORNER RADII (derived from observed token usage)
+     ============================================================ */
+  --sd-radius-xs:  4px;
+  --sd-radius-sm:  6px;
+  --sd-radius-md:  8px;    /* default for buttons, inputs */
+  --sd-radius-lg:  12px;   /* cards */
+  --sd-radius-xl:  16px;   /* large feature cards */
+  --sd-radius-pill: 999px;
+
+  /* ============================================================
+     SPACING — 4px base grid
+     ============================================================ */
+  --sd-space-1:  4px;
+  --sd-space-2:  8px;
+  --sd-space-3:  12px;
+  --sd-space-4:  16px;
+  --sd-space-5:  20px;
+  --sd-space-6:  24px;
+  --sd-space-8:  32px;
+  --sd-space-10: 40px;
+  --sd-space-12: 48px;
+  --sd-space-16: 64px;
+
+  /* ============================================================
+     TYPE FOUNDATIONS
+     ============================================================ */
+  --sd-font-sans:  'Outfit', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --sd-font-mono:  ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, monospace;
+
+  /* Weights (named per tokens) */
+  --sd-weight-regular:  400;
+  --sd-weight-medium:   500;
+  --sd-weight-semibold: 600;
+  --sd-weight-bold:     700;
+
+  /* Sizes (from fontSize.0–8 in tokens) */
+  --sd-fs-0:  10px;
+  --sd-fs-1:  12px;
+  --sd-fs-2:  14px;
+  --sd-fs-3:  16px;
+  --sd-fs-4:  20px;
+  --sd-fs-5:  24px;
+  --sd-fs-6:  32px;
+  --sd-fs-7:  44px;
+  --sd-fs-8:  56px;
+
+  /* Line-heights */
+  --sd-lh-tight:   1.10;
+  --sd-lh-snug:    1.20;
+  --sd-lh-heading: 1.30;
+  --sd-lh-body:    1.50;
+}
+
+/* =====================================================================
+   GLOBAL BASE
+   ===================================================================== */
+html, body {
+  font-family: var(--sd-font-sans);
+  color: var(--sd-fg-1);
+  background: var(--sd-bg-app);
+  font-size: 16px;
+  line-height: var(--sd-lh-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* =====================================================================
+   TYPOGRAPHIC ROLES — mapped from tokens (Heading 1–6, Body 1–4 × R/M/SB)
+   ===================================================================== */
+
+/* --- Display / Headings --- */
+.sd-h1 {
+  font-family: var(--sd-font-sans);
+  font-weight: var(--sd-weight-bold);
+  font-size: var(--sd-fs-8);        /* 56 */
+  line-height: var(--sd-lh-tight);
+  color: var(--sd-heading);
+  letter-spacing: -0.01em;
+}
+.sd-h1--sm { font-size: var(--sd-fs-7); }  /* 44, the "Heading 1 / 5" variant */
+
+.sd-h2 {
+  font-family: var(--sd-font-sans);
+  font-weight: var(--sd-weight-bold);
+  font-size: var(--sd-fs-6);        /* 32 */
+  line-height: var(--sd-lh-snug);
+  color: var(--sd-heading);
+}
+.sd-h2--sm { font-size: var(--sd-fs-5); line-height: var(--sd-lh-heading); } /* 24 */
+
+.sd-h3 {
+  font-family: var(--sd-font-sans);
+  font-weight: var(--sd-weight-bold);
+  font-size: var(--sd-fs-4);        /* 20 */
+  line-height: var(--sd-lh-heading);
+  color: var(--sd-heading);
+}
+
+.sd-h4 {
+  font-family: var(--sd-font-sans);
+  font-weight: var(--sd-weight-bold);
+  font-size: var(--sd-fs-3);        /* 16 */
+  line-height: var(--sd-lh-body);
+  color: var(--sd-heading);
+}
+
+.sd-h5 {
+  font-family: var(--sd-font-sans);
+  font-weight: var(--sd-weight-bold);
+  font-size: var(--sd-fs-2);        /* 14 */
+  line-height: var(--sd-lh-body);
+  color: var(--sd-heading);
+}
+
+.sd-h6 {
+  font-family: var(--sd-font-sans);
+  font-weight: var(--sd-weight-bold);
+  font-size: var(--sd-fs-1);        /* 12 */
+  line-height: var(--sd-lh-body);
+  color: var(--sd-heading);
+  text-transform: none;
+}
+
+/* --- Body --- */
+.sd-body-1 { font: var(--sd-weight-regular) var(--sd-fs-3)/1.5 var(--sd-font-sans); color: var(--sd-fg-3); }
+.sd-body-2 { font: var(--sd-weight-regular) var(--sd-fs-2)/1.5 var(--sd-font-sans); color: var(--sd-fg-3); }
+.sd-body-3 { font: var(--sd-weight-regular) var(--sd-fs-1)/1.5 var(--sd-font-sans); color: var(--sd-fg-3); }
+.sd-body-4 { font: var(--sd-weight-regular) var(--sd-fs-0)/12px var(--sd-font-sans); color: var(--sd-fg-3); }
+
+.sd-body-1--m  { font-weight: var(--sd-weight-medium); }
+.sd-body-2--m  { font-weight: var(--sd-weight-medium); }
+.sd-body-3--m  { font-weight: var(--sd-weight-medium); }
+.sd-body-4--m  { font-weight: var(--sd-weight-medium); }
+
+.sd-body-1--sb { font-weight: var(--sd-weight-semibold); }
+.sd-body-2--sb { font-weight: var(--sd-weight-semibold); }
+.sd-body-3--sb { font-weight: var(--sd-weight-semibold); }
+.sd-body-4--sb { font-weight: var(--sd-weight-semibold); }
+
+/* --- Roles aliasing native tags --- */
+h1 { font: var(--sd-weight-bold) var(--sd-fs-7)/1.1 var(--sd-font-sans); color: var(--sd-heading); margin: 0; }
+h2 { font: var(--sd-weight-bold) var(--sd-fs-6)/1.2 var(--sd-font-sans); color: var(--sd-heading); margin: 0; }
+h3 { font: var(--sd-weight-bold) var(--sd-fs-4)/1.3 var(--sd-font-sans); color: var(--sd-heading); margin: 0; }
+h4 { font: var(--sd-weight-bold) var(--sd-fs-3)/1.5 var(--sd-font-sans); color: var(--sd-heading); margin: 0; }
+h5 { font: var(--sd-weight-bold) var(--sd-fs-2)/1.5 var(--sd-font-sans); color: var(--sd-heading); margin: 0; }
+h6 { font: var(--sd-weight-bold) var(--sd-fs-1)/1.5 var(--sd-font-sans); color: var(--sd-heading); margin: 0; }
+p  { font: var(--sd-weight-regular) var(--sd-fs-2)/1.5 var(--sd-font-sans); color: var(--sd-fg-3); margin: 0; }
+small { font: var(--sd-weight-regular) var(--sd-fs-1)/1.5 var(--sd-font-sans); color: var(--sd-fg-3); }
+code { font: var(--sd-weight-regular) var(--sd-fs-2)/1.5 var(--sd-font-mono); color: var(--sd-fg-1); background: var(--sd-accent-1); padding: 2px 6px; border-radius: var(--sd-radius-xs); }
+
+/* Utility: numeric tabular for dashboards */
+.sd-num { font-variant-numeric: tabular-nums; }
