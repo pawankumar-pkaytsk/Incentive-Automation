@@ -8,8 +8,8 @@
    Self-hosted from the official brand TTF in fonts/. */
 @font-face {
   font-family: 'Outfit';
-  src: url('fonts/Outfit-VariableFont_wght.ttf') format('truetype-variations'),
-       url('fonts/Outfit-VariableFont_wght.ttf') format('truetype');
+  src: url('Outfit-VariableFont_wght.ttf') format('truetype-variations'),
+       url('Outfit-VariableFont_wght.ttf') format('truetype');
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;

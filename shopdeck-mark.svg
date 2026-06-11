@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Shopdeck mark">
+  <defs>
+    <linearGradient id="sd-grad-m" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0.6146" stop-color="#4764cd"></stop>
+      <stop offset="1" stop-color="#5694f2"></stop>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#eff2fa"></rect>
+  <g transform="translate(10,12)">
+    <rect x="0" y="28" width="44" height="12" rx="4" fill="#c8d1f0"></rect>
+    <rect x="3" y="14" width="38" height="12" rx="4" fill="#5694f2"></rect>
+    <rect x="6" y="0" width="32" height="12" rx="4" fill="url(#sd-grad-m)"></rect>
+  </g>
+</svg>

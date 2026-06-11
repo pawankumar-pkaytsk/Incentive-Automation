@@ -91,7 +91,7 @@ const Login = ({ onLogin }) => {
       <div style={{ position: 'relative', overflow: 'hidden', color: '#fff', background: 'linear-gradient(135deg, #34499f 0%, #4764cd 55%, #5694f2 100%)', padding: 56, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         <div style={{ position: 'absolute', inset: 0, opacity: 0.5, background: 'radial-gradient(600px 300px at 80% 10%, rgba(255,255,255,0.18), transparent), radial-gradient(500px 400px at 10% 90%, rgba(255,255,255,0.12), transparent)' }}></div>
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src="assets/shopdeck-mark.svg" alt="" style={{ width: 34, height: 34, filter: 'brightness(0) invert(1)' }} />
+          <img src="shopdeck-mark.svg" alt="" style={{ width: 34, height: 34, filter: 'brightness(0) invert(1)' }} />
           <div style={{ font: '700 20px/1 var(--sd-font-sans)', letterSpacing: -0.3 }}>Shopdeck</div>
           <span style={{ marginLeft: 4, background: 'rgba(255,255,255,0.18)', fontSize: 11, fontWeight: 700, letterSpacing: 0.4, padding: '4px 9px', borderRadius: 6 }}>INCENTIVES</span>
         </div>
@@ -165,7 +165,7 @@ const AppHeader = ({ user, onHome, onLogout, activeKey, onPeriodChange, onOpenSo
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 20, height: 60, background: 'rgba(255,255,255,0.9)', backdropFilter: 'saturate(140%) blur(8px)', borderBottom: '1px solid var(--sd-border)', display: 'flex', alignItems: 'center', gap: 16, padding: '0 28px' }}>
       <button onClick={onHome || undefined} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: onHome ? 'pointer' : 'default', padding: 0 }}>
-        <img src="assets/shopdeck-mark.svg" alt="" style={{ width: 26, height: 26 }} />
+        <img src="shopdeck-mark.svg" alt="" style={{ width: 26, height: 26 }} />
         <span style={{ font: '700 16px/1 var(--sd-font-sans)', letterSpacing: -0.2, color: 'var(--sd-heading)' }}>Incentives</span>
         <span style={{ background: 'var(--sd-accent-1)', color: 'var(--sd-primary)', fontSize: 10, fontWeight: 700, letterSpacing: 0.4, padding: '3px 7px', borderRadius: 5 }}>LIVE</span>
       </button>

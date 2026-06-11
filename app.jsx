@@ -78,12 +78,36 @@ const Home = ({ user, onOpenTeam, onOpenAdmin, onOpenPerson }) => {
   );
 };
 
+/* ---- In-app browser detection (the real cause of sign-in failures) --
+   Google blocks OAuth inside embedded webviews (WhatsApp, Instagram,
+   LinkedIn, Slack, Messenger, FB, in-app browsers). Detect & redirect. */
+const detectInApp = () => {
+  const ua = (navigator.userAgent || navigator.vendor || '').toLowerCase();
+  const checks = [
+    ['WhatsApp', /whatsapp/], ['Instagram', /instagram/], ['Facebook', /\bfb[\w_]+\/|fban|fbav|fb_iab/], ['Messenger', /messenger/],
+    ['LinkedIn', /linkedin/], ['Slack', /slack/], ['Telegram', /telegram/], ['Snapchat', /snapchat/],
+    ['Twitter', /twitter/], ['Line', /\bline\//], ['WeChat', /micromessenger/], ['TikTok', /musical_ly|bytedance|tiktok/],
+    ['Gmail', /gsa\//],
+  ];
+  for (const [name, re] of checks) if (re.test(ua)) return name;
+  // Generic Android in-app webview: has "wv" or is Version/x.x Chrome without real Chrome menu
+  if (/\bwv\b/.test(ua)) return 'in-app';
+  return null;
+};
+
 /* ---- Google sign-in → live Sheets fetch (no backend) --------------- */
 const EmailLogin = ({ onLogin }) => {
   const I = window.INCENTIVE;
   const [busy, setBusy] = React.useState(false);
   const [status, setStatus] = React.useState('');
   const [err, setErr] = React.useState('');
+  const [copied, setCopied] = React.useState(false);
+  const inApp = React.useMemo(detectInApp, []);
+  const pageUrl = (typeof window !== 'undefined' && window.location ? window.location.href : '');
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(pageUrl); } catch (e) { try { const t = document.createElement('textarea'); t.value = pageUrl; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); } catch (e2) {} }
+    setCopied(true); setTimeout(() => setCopied(false), 2200);
+  };
   const signIn = async () => {
     setErr(''); setBusy(true); setStatus('Opening Google sign-in…');
     try {
@@ -92,7 +116,9 @@ const EmailLogin = ({ onLogin }) => {
     } catch (e) {
       setBusy(false); setStatus('');
       const msg = String(e && e.message || e);
-      if (/popup|denied|closed|interaction|oauth_error/i.test(msg)) setErr('Sign-in was cancelled. Please try again.');
+      if (detectInApp() || /disallowed_useragent|403.*useragent/i.test(msg)) setErr('__INAPP__');
+      else if (/popup|denied|closed|interaction|oauth_error/i.test(msg)) setErr('Sign-in was cancelled or blocked. Please try again — and make sure pop-ups are allowed.');
+      else if (/origin_mismatch|redirect_uri|idpiframe|invalid.*origin/i.test(msg)) setErr('This site’s web address isn’t authorised in Google yet. Send this exact URL to your admin: ' + (window.location && window.location.origin));
       else if (/403|PERMISSION|forbidden/i.test(msg)) setErr('Signed in, but this account can’t read one of the sheets. Ask for view access, then retry.');
       else setErr('Could not load data: ' + msg);
     }
@@ -105,16 +131,33 @@ const EmailLogin = ({ onLogin }) => {
       </div>
       <div style={{ position: 'relative', width: '100%', maxWidth: 400, background: 'var(--sd-white)', border: '1px solid var(--sd-border)', borderRadius: 'var(--sd-radius-xl)', boxShadow: 'var(--sd-shadow-elevated)', padding: 32, animation: 'fadeUp 360ms ease both' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
-          <img src="assets/shopdeck-mark.svg" alt="" style={{ width: 34, height: 34 }} />
+          <img src="shopdeck-mark.svg" alt="" style={{ width: 34, height: 34 }} />
           <div><div style={{ font: '700 18px/1 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>Incentives</div><div style={{ font: '400 12px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginTop: 3 }}>Live incentive tracking</div></div>
         </div>
         <h2 style={{ font: '700 22px/1.2 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>Sign in</h2>
         <p style={{ font: '400 13px/1.5 var(--sd-font-sans)', color: 'var(--sd-fg-3)', margin: '6px 0 20px' }}>Sign in with your company Google account. Your data is read live from the sheets you already have access to.</p>
+        {inApp ? (
+          <div style={{ marginBottom: 18, padding: '14px 14px', borderRadius: 'var(--sd-radius-md)', background: 'var(--sd-yellow-50)', border: '1px solid var(--sd-yellow-200)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <Icon name="warning" size={16} style={{ color: 'var(--sd-yellow-900)' }} />
+              <span style={{ font: '700 13px/1.2 var(--sd-font-sans)', color: 'var(--sd-yellow-900)' }}>Open in your browser to sign in</span>
+            </div>
+            <p style={{ font: '400 12px/1.5 var(--sd-font-sans)', color: 'var(--sd-fg-2)', margin: '0 0 10px' }}>You opened this link inside {inApp === 'in-app' ? 'an app' : inApp}. Google sign-in doesn’t work in in-app browsers. Tap the <strong>⋮</strong> / <strong>share</strong> menu and choose <strong>“Open in Chrome”</strong> or <strong>“Open in Safari”</strong> — or copy the link below.</p>
+            <button onClick={copyLink} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'var(--sd-white)', border: '1px solid var(--sd-border)', borderRadius: 'var(--sd-radius-md)', padding: '10px 14px', font: '600 13px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', cursor: 'pointer' }}>
+              <Icon name={copied ? 'check' : 'copy'} size={15} style={{ color: copied ? 'var(--sd-green-700)' : 'var(--sd-fg-2)' }} />{copied ? 'Link copied — paste in Chrome/Safari' : 'Copy link'}
+            </button>
+          </div>
+        ) : null}
         <button onClick={signIn} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: 'var(--sd-white)', border: '1px solid var(--sd-border)', borderRadius: 'var(--sd-radius-md)', padding: '12px 16px', font: '600 14px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.7 : 1, boxShadow: 'var(--sd-shadow-soft)' }}>
           <GoogleG size={18} />{busy ? 'Working…' : 'Continue with Google'}
         </button>
         {busy && status ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, font: '500 12px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}><span className="sd-spin" style={{ width: 13, height: 13, border: '2px solid var(--sd-accent-2)', borderTopColor: 'var(--sd-primary)', borderRadius: '50%', display: 'inline-block' }}></span>{status}</div> : null}
-        {err ? <div style={{ marginTop: 16, padding: '10px 12px', borderRadius: 'var(--sd-radius-md)', background: 'var(--sd-red-50)', color: 'var(--sd-red-900)', font: '500 12px/1.5 var(--sd-font-sans)' }}>{err}</div> : null}
+        {err === '__INAPP__' ? (
+          <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 'var(--sd-radius-md)', background: 'var(--sd-yellow-50)', border: '1px solid var(--sd-yellow-200)' }}>
+            <p style={{ font: '600 12px/1.5 var(--sd-font-sans)', color: 'var(--sd-yellow-900)', margin: '0 0 10px' }}>Google blocks sign-in inside in-app browsers. Open this page in Chrome or Safari, then sign in.</p>
+            <button onClick={copyLink} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'var(--sd-white)', border: '1px solid var(--sd-border)', borderRadius: 'var(--sd-radius-md)', padding: '9px 14px', font: '600 13px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', cursor: 'pointer' }}><Icon name={copied ? 'check' : 'copy'} size={15} />{copied ? 'Link copied' : 'Copy link'}</button>
+          </div>
+        ) : err ? <div style={{ marginTop: 16, padding: '10px 12px', borderRadius: 'var(--sd-radius-md)', background: 'var(--sd-red-50)', color: 'var(--sd-red-900)', font: '500 12px/1.5 var(--sd-font-sans)', wordBreak: 'break-word' }}>{err}</div> : null}
         <p style={{ font: '400 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-lowlight-2)', marginTop: 16, textAlign: 'center' }}>Company Google account required · read-only access to incentive sheets.</p>
       </div>
     </div>

@@ -59,8 +59,8 @@
   const bandCall = (v) => v > 95 ? 'green' : v >= 75 ? 'yellow' : 'red';
   const bandWes = (v) => v < 25 ? 'green' : v <= 45 ? 'yellow' : 'red';
   function multiplier(b) { const n = b.length, g = b.filter(x => x === 'green').length, y = b.filter(x => x === 'yellow').length, r = b.filter(x => x === 'red').length; if (!n) return { mult: 1, gcBand: null, rule: 'no inputs' }; if (r === n) return { mult: 0, gcBand: 'Red', rule: 'All ' + n + ' Red' }; if (r >= 2) return { mult: 0.70, gcBand: 'Red', rule: r + ' Reds' }; if (r === 1) return { mult: 0.85, gcBand: 'Red', rule: 'Exactly 1 Red' }; if (g === n) return { mult: 1.50, gcBand: 'Green', rule: 'All ' + n + ' Green' }; if (y === n) return { mult: 1.00, gcBand: 'Yellow', rule: 'All ' + n + ' Yellow' }; return { mult: 1.30, gcBand: 'Yellow', rule: 'Mix Green & Yellow, no Red' }; }
-  const KAE_BASE = 6500;
-  const KAE_BANDS = [{ max: 0, amount: 6500, ded: 0, label: '0 strikes' }, { max: 3, amount: 5200, ded: 20, label: '1–3 strikes' }, { max: 5, amount: 3250, ded: 50, label: '>3–5 strikes' }, { max: Infinity, amount: 0, ded: 100, label: '>5 strikes' }];
+  const KAE_BASE = 6000;
+  const KAE_BANDS = [{ max: 0, amount: 6000, ded: 0, label: '0 strikes' }, { max: 3, amount: 4800, ded: 20, label: '1–3 strikes' }, { max: 5, amount: 3000, ded: 50, label: '>3–5 strikes' }, { max: Infinity, amount: 0, ded: 100, label: '>5 strikes' }];
   const kaeBandOf = (n) => KAE_BANDS.find((b) => n <= b.max);
   const ADMINS = (I.ADMINS || []).map((e) => e.toLowerCase());
 

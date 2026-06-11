@@ -100,7 +100,7 @@ const PersonView = ({ person, viewer, onBack, onChange }) => {
     const strikePayload = {
       title: 'KAE strikes', subtitle: person.name + ' · ' + m.label + ' (20th→20th)', icon: 'warning-circle',
       filename: 'kae_strikes_' + m.key, width: 600,
-      formula: 'Base ₹6,500 · ' + m.strikeCount + ' strike(s) → ' + band.label + ' → ' + band.ded + '% deduction',
+      formula: 'Base ₹6,000 · ' + m.strikeCount + ' strike(s) → ' + band.label + ' → ' + band.ded + '% deduction',
       columns: [
         { key: 'n', label: '#', w: '0.4fr', num: true, fmt: (v, r, i) => undefined },
         { key: 'date', label: 'Strike date', w: '1fr', num: true },
@@ -118,12 +118,12 @@ const PersonView = ({ person, viewer, onBack, onChange }) => {
             <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
               <div style={{ padding: '16px 16px 4px' }}><SectionTitle eyebrow="Full transparency · KAE" title={`How your ${I.PERIOD} incentive is calculated`} /></div>
               <div style={{ padding: '0 16px 10px' }}>
-                <MathRow label="Base incentive" detail="Fixed ₹6,500 per KAE" value={I.inr(m.kaeBase)} />
+                <MathRow label="Base incentive" detail="Fixed ₹6,000 per KAE" value={I.inr(m.kaeBase)} />
                 <MathRow label="Strikes (20th→20th)" detail={<DrillNumber payload={strikePayload} title="See which strikes counted">{m.strikeCount + ' strike' + (m.strikeCount === 1 ? '' : 's')}</DrillNumber>} value={band.label} accent={tile(m.strikeCount)} />
                 <MathRow label="Deduction" detail={`${band.label} → ${band.ded}% of base`} value={'−' + band.ded + '%'} accent={band.ded ? 'var(--sd-red-700)' : 'var(--sd-green-700)'} indent />
               </div>
               <div style={{ padding: '4px 16px 16px' }}>
-                <MathRow strong label={`Final incentive · ${I.PERIOD}`} detail={`₹6,500 × (1 − ${band.ded}%)`} value={I.inr(m.amount)} />
+                <MathRow strong label={`Final incentive · ${I.PERIOD}`} detail={`₹6,000 × (1 − ${band.ded}%)`} value={I.inr(m.amount)} />
               </div>
             </Card>
             <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
@@ -135,7 +135,7 @@ const PersonView = ({ person, viewer, onBack, onChange }) => {
               {m.strikes.length === 0 ? (
                 <div style={{ padding: '4px 16px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Icon name="check-circle" size={20} style={{ color: 'var(--sd-green-700)' }} />
-                  <span style={{ font: '500 13px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>No strikes — full ₹6,500 incentive, no deduction.</span>
+                  <span style={{ font: '500 13px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>No strikes — full ₹6,000 incentive, no deduction.</span>
                 </div>
               ) : (
                 <div>
@@ -163,7 +163,7 @@ const PersonView = ({ person, viewer, onBack, onChange }) => {
             <Card variant="regular" padding={18}>
               <div style={{ font: '700 14px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', marginBottom: 12 }}>KAE strike schedule</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {[['0', '₹6,500', 'No deduction', 0], ['1–3', '₹5,200', '20% off', 3], ['>3–5', '₹3,250', '50% off', 5], ['>5', '₹0', '100% off', 99]].map((r) => {
+                {[['0', '₹6,000', 'No deduction', 0], ['1–3', '₹4,800', '20% off', 3], ['>3–5', '₹3,000', '50% off', 5], ['>5', '₹0', '100% off', 99]].map((r) => {
                   const active = (r[3] === 0 && m.strikeCount === 0) || (r[0] === '1–3' && m.strikeCount >= 1 && m.strikeCount <= 3) || (r[0] === '>3–5' && m.strikeCount > 3 && m.strikeCount <= 5) || (r[0] === '>5' && m.strikeCount > 5);
                   return (
                     <div key={r[0]} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 'var(--sd-radius-md)', background: active ? 'var(--sd-accent-1)' : 'transparent', border: active ? '1px solid var(--sd-primary)' : '1px solid var(--sd-stroke)' }}>

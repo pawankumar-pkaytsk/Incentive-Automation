@@ -62,11 +62,11 @@
   function wesScore(social, sos, internal) { return social * 3 + sos * 1.5 + internal * 1; }
 
   /* ---- KAE strike-based incentive (₹, per doc §13) ------------------- */
-  const KAE_BASE = 6500;
+  const KAE_BASE = 6000;
   const KAE_BANDS = [
-    { max: 0,        amount: 6500, ded: 0,   label: '0 strikes' },
-    { max: 3,        amount: 5200, ded: 20,  label: '1–3 strikes' },
-    { max: 5,        amount: 3250, ded: 50,  label: '>3–5 strikes' },
+    { max: 0,        amount: 6000, ded: 0,   label: '0 strikes' },
+    { max: 3,        amount: 4800, ded: 20,  label: '1–3 strikes' },
+    { max: 5,        amount: 3000, ded: 50,  label: '>3–5 strikes' },
     { max: Infinity, amount: 0,    ded: 100, label: '>5 strikes' },
   ];
   function kaeBand(n) { return KAE_BANDS.find((b) => n <= b.max); }
