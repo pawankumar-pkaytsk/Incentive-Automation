@@ -131,7 +131,7 @@ const EmailLogin = ({ onLogin }) => {
       </div>
       <div style={{ position: 'relative', width: '100%', maxWidth: 400, background: 'var(--sd-white)', border: '1px solid var(--sd-border)', borderRadius: 'var(--sd-radius-xl)', boxShadow: 'var(--sd-shadow-elevated)', padding: 32, animation: 'fadeUp 360ms ease both' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
-          <img src="shopdeck-mark.svg" alt="" style={{ width: 34, height: 34 }} />
+          <img src="assets/shopdeck-mark.svg" alt="" style={{ width: 34, height: 34 }} />
           <div><div style={{ font: '700 18px/1 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>Incentives</div><div style={{ font: '400 12px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginTop: 3 }}>Live incentive tracking</div></div>
         </div>
         <h2 style={{ font: '700 22px/1.2 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>Sign in</h2>
@@ -196,7 +196,7 @@ const App = () => {
   else if (route.name === 'admin') body = <AdminView viewer={user} initialTab={route.tab} onOpenPerson={(p) => openPerson(p, { name: 'admin', tab: route.tab })} onBack={home} />;
   else if (route.name === 'person') {
     const back = route.root ? null : (route.from ? () => go(route.from) : home);
-    body = <PersonView person={route.person} viewer={user} onBack={back} onChange={bump} />;
+    body = <PersonView person={route.person} viewer={user} onBack={back} onChange={bump} onOpenPerson={(p) => go({ name: 'person', person: p, from: route.from })} />;
   }
 
   return (

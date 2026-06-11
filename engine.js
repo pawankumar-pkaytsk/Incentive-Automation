@@ -260,19 +260,38 @@
     }
   });
 
-  /* ---- GM rollup: a GM's HITs = sum of their reports' HITs ----------- */
-  // Managers/admins are treated as GMs (handover sheet col F = GM name).
+  /* ---- GM incentive (doc §3): achievement from handover col F (here:
+     sum of reporting GCs), Output = (HITs ÷ Target) × 25%, then GC-Ops
+     multiplier across reporting GCs: any Red→0.70, Yellow→1.20, Green→1.50. */
+  const gmOpsMult = (gcs, mKey) => {
+    const bands = gcs.map((d) => d.byMonth[mKey].gcBand).filter(Boolean);
+    if (!bands.length) return { mult: 1, rule: 'No GC ops data', g: 0, y: 0, r: 0 };
+    const r = bands.filter((b) => b === 'Red').length, y = bands.filter((b) => b === 'Yellow').length, g = bands.filter((b) => b === 'Green').length;
+    if (r > 0) return { mult: 0.70, rule: 'Any GC Red', g, y, r };
+    if (y > 0) return { mult: 1.20, rule: 'GC Yellow, none Red', g, y, r };
+    return { mult: 1.50, rule: 'All GCs Green', g, y, r };
+  };
   people.filter((p) => p.role !== 'gc').forEach((gm) => {
-    const team = descendants(gm).filter((d) => d.role === 'gc');
+    const gcs = descendants(gm).filter((d) => d.role === 'gc');
+    const is1k5k = gcs.some((d) => d.team === 'midmarket');
     MONTHS.forEach((m) => {
-      const recs = team.map((d) => d.byMonth[m.key]);
+      const recs = gcs.map((d) => d.byMonth[m.key]);
       const weightedHits = recs.reduce((s, r) => s + r.weightedHits, 0);
       const rawHits = recs.reduce((s, r) => s + r.rawHits, 0);
-      // GM target from target sheet (sample): sum of team targets × 0.9
+      const threeWeekCounted = recs.reduce((a, r) => a.concat(r.threeWeekCounted || []), []);
+      const counted = recs.reduce((a, r) => a.concat(r.counted || []), []);
       const target = Math.round(recs.reduce((s, r) => s + r.target, 0) * 0.9);
       const achievementPct = target > 0 ? (weightedHits / target) * 100 : null;
-      const gmRec = gm.byMonth[m.key];
-      gmRec.gm = { weightedHits, rawHits, target, achievementPct, teamSize: team.length };
+      const output = target > 0 ? (weightedHits / target) * 25 : null;
+      const ops = gmOpsMult(gcs, m.key);
+      const finalPct = output == null ? null : output * ops.mult;
+      gm.byMonth[m.key].gm = {
+        weightedHits, rawHits, threeWeekCounted, counted, target, achievementPct, outputPct: output,
+        opsMult: ops.mult, opsRule: ops.rule, opsGreen: ops.g, opsYellow: ops.y, opsRed: ops.r,
+        finalPct, teamSize: gcs.length,
+        is1k5k, kickerPct: 0, kickerNote: is1k5k ? 'GL kicker (1/5 of GL incentive) pending GL logic' : '',
+        dataHealth: target === 0 ? 'missing' : 'ok',
+      };
     });
   });
 

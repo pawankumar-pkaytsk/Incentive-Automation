@@ -31,7 +31,7 @@ const PersonHeader = ({ person, viewer }) => {
       <div style={{ textAlign: 'right', minWidth: 160 }}>
         <div style={{ font: '600 11px/1 var(--sd-font-sans)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--sd-fg-2)', marginBottom: 6 }}>{I.PERIOD} · Final incentive</div>
         {person.logic === 'kae' ? <div style={{ font: '700 40px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}>{I.inr(m.amount)}</div>
-          : isGM ? <div style={{ font: '700 24px/1.1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>Team rollup</div>
+          : isGM ? (m.gm && m.gm.finalPct != null ? <div style={{ font: '700 40px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}><CountUp value={m.gm.finalPct} format={(v) => I.pct(v, 2)} /></div> : <div style={{ font: '700 22px/1.1 var(--sd-font-sans)', color: 'var(--sd-red-500)' }}>Pending data</div>)
           : (m.finalPct != null ? <div style={{ font: '700 40px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}><CountUp value={finalPctAdj} format={(v) => I.pct(v, 2)} /></div>
             : <div style={{ font: '700 22px/1.1 var(--sd-font-sans)', color: 'var(--sd-red-500)' }}>Pending data</div>)}
       </div>
@@ -58,7 +58,7 @@ const SellerLedgerCard = ({ m }) => (
   </Card>
 );
 
-const PersonView = ({ person, viewer, onBack, onChange }) => {
+const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
   const I = window.INCENTIVE;
   const m = I.cur(person);
   const team = I.TEAMS[person.team];
@@ -68,26 +68,93 @@ const PersonView = ({ person, viewer, onBack, onChange }) => {
   const apPct = Number(m.adhocPct) || 0, apAbs = Number(m.adhocAbs) || 0;
   const hasAdhoc = apPct || apAbs;
 
-  /* ---------- GM rollup ---------- */
+  /* ---------- GM incentive (doc §3) ---------- */
   if (isGM) {
-    const gm = m.gm || { weightedHits: 0, rawHits: 0, target: 0, achievementPct: null, teamSize: 0 };
+    const gm = m.gm || { weightedHits: 0, rawHits: 0, threeWeekCounted: [], counted: [], target: 0, achievementPct: null, outputPct: null, opsMult: 1, opsRule: '—', opsGreen: 0, opsYellow: 0, opsRed: 0, finalPct: null, teamSize: 0, is1k5k: false, kickerNote: '' };
+    const gcs = (person.reports || []).filter((d) => d.role === 'gc');
+    const sellersPayload = {
+      title: 'HITs counted for this GM', subtitle: person.name + ' · ' + m.label, icon: 'list-checks',
+      filename: 'gm_hits_' + m.key, formula: 'Weighted HITs = Σ (3-week ×1.5, standard ×1) where handover = TRUE (handover col F = GM)',
+      columns: [
+        { key: 'sellerId', label: 'Seller ID', w: '1fr', num: true },
+        { key: 'sellerName', label: 'Seller', w: '1.4fr' },
+        { key: 'hitMonthName', label: 'HIT month', w: '0.9fr', fmt: (v, r) => v + ' ' + r.hitYear },
+        { key: 'threeWeek', label: '3-week', w: '0.7fr', fmt: (v) => v ? 'Yes ×1.5' : 'No ×1' },
+      ],
+      rows: gm.counted || [],
+    };
+    const opsColor = gm.opsMult >= 1.5 ? 'var(--sd-green-700)' : gm.opsMult >= 1.2 ? 'var(--sd-heading)' : 'var(--sd-red-700)';
     return (
       <div style={{ animation: 'fadeUp 360ms ease both' }}>
         {onBack ? <BackBtn onBack={onBack} /> : null}
         <PersonHeader person={person} viewer={viewer} />
         {person.pip.flagged ? <div style={{ marginBottom: 20 }}><PIPCard person={person} /></div> : null}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
-          <MetricTile label="Team HITs" value={gm.weightedHits.toFixed(1)} sub={`${gm.teamSize} GCs`} icon="users-three" accent={team.accent} />
-          <MetricTile label="GM target" value={gm.target || '—'} sub="From target sheet" icon="target" accent="var(--sd-primary)" />
-          <MetricTile label="Achievement" value={gm.achievementPct == null ? '—' : gm.achievementPct.toFixed(0) + '%'} sub="Team rollup" icon="gauge" accent="var(--sd-green-700)" />
-          <MetricTile label="PIP threshold" value="70%" sub={person.pip.flagged ? 'Below — flagged' : 'Above'} icon="flag" accent={person.pip.flagged ? 'var(--sd-red-500)' : 'var(--sd-fg-3)'} />
-        </div>
-        <Card variant="regular" padding={20}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Icon name="info" size={18} style={{ color: 'var(--sd-primary)' }} />
-            <div style={{ font: '600 14px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-1)' }}>GM incentive formula is not yet defined — this view shows the HIT rollup &amp; PIP status. Plug in the GM logic sheet to compute the payout %.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(0,1fr)', gap: 20, alignItems: 'start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '16px 16px 4px' }}><SectionTitle eyebrow="Full transparency · GM" title={`How your ${I.PERIOD} incentive is calculated`} /></div>
+              <div style={{ padding: '0 16px 10px' }}>
+                <MathRow label="Team HITs (handover = TRUE)" detail={`From handover sheet · GM column · ${gm.teamSize} GCs reporting`} value={<DrillNumber payload={sellersPayload}>{gm.counted.length}</DrillNumber>} />
+                <MathRow label="3-week HITs (×1.5)" detail={`${gm.threeWeekCounted.length} sellers from 3-week go-live`} value={gm.threeWeekCounted.length ? '+' + (gm.threeWeekCounted.length * 0.5).toFixed(1) : '0'} indent accent="var(--sd-green-700)" />
+                <MathRow label="Weighted HITs achievement" detail="Standard ×1 + 3-week ×1.5" value={<DrillNumber payload={sellersPayload}>{gm.weightedHits.toFixed(1)}</DrillNumber>} />
+                <MathRow label="GM target" detail="From target sheet (month-wise)" value={gm.target || '—'} />
+                <MathRow label="GM output" detail={`(${gm.weightedHits.toFixed(1)} ÷ ${gm.target || '—'}) × 25%`} value={gm.outputPct == null ? '—' : I.pct(gm.outputPct, 2)} accent="var(--sd-primary)" />
+                <MathRow label={`GC Ops multiplier — ${gm.opsRule}`} detail={`Reporting GCs · ${gm.opsGreen} green · ${gm.opsYellow} yellow · ${gm.opsRed} red`} value={'×' + gm.opsMult.toFixed(2)} accent={opsColor} indent />
+                {gm.is1k5k ? <MathRow label="1k–5k GL kicker" detail={gm.kickerNote} value="pending" accent="var(--sd-orange-700)" indent /> : null}
+              </div>
+              <div style={{ padding: '4px 16px 16px' }}>
+                <MathRow strong label={`Final incentive · ${I.PERIOD}`} detail={gm.outputPct == null ? 'GM target missing' : `Output ${I.pct(gm.outputPct, 2)} × ${gm.opsMult.toFixed(2)}`} value={gm.finalPct == null ? 'Pending' : I.pct(gm.finalPct, 2)} />
+              </div>
+            </Card>
+            <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '14px 16px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="users-three" size={18} style={{ color: team.accent }} />
+                <div style={{ font: '700 15px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', flex: 1 }}>Reporting GCs &amp; their ops band</div>
+                <span style={{ font: '600 12px/1 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>{gcs.length} GCs</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 0.5fr', gap: 8, padding: '8px 16px', background: 'var(--sd-bg-app)', font: '600 10px/1 var(--sd-font-sans)', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sd-fg-2)' }}>
+                <span>GC</span><span style={{ textAlign: 'right' }}>HITs</span><span style={{ textAlign: 'center' }}>Ops band</span><span></span>
+              </div>
+              {gcs.map((d, i) => {
+                const dm = d.byMonth[m.key]; const b = dm.gcBand;
+                const bc = b === 'Green' ? 'var(--sd-green-700)' : b === 'Yellow' ? 'var(--sd-yellow-700)' : b === 'Red' ? 'var(--sd-red-500)' : 'var(--sd-fg-3)';
+                return (
+                  <div key={d.email} onClick={() => onOpenPerson && onOpenPerson(d)} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 0.5fr', gap: 8, padding: '10px 16px', borderTop: '1px solid var(--sd-stroke)', alignItems: 'center', cursor: onOpenPerson ? 'pointer' : 'default' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}><Avatar name={d.name} size={26} /><span style={{ font: '600 12px/1.2 var(--sd-font-sans)', color: 'var(--sd-heading)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</span></div>
+                    <span className="sd-num" style={{ textAlign: 'right', font: '600 12px/1 var(--sd-font-sans)', color: 'var(--sd-fg-1)' }}>{dm.weightedHits.toFixed(1)}</span>
+                    <span style={{ textAlign: 'center' }}>{b ? <span style={{ font: '700 11px/1 var(--sd-font-sans)', color: bc }}>{b}</span> : <span style={{ font: '400 11px var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>—</span>}</span>
+                    <Icon name="caret-right" size={14} style={{ color: 'var(--sd-lowlight-2)' }} />
+                  </div>
+                );
+              })}
+              {gcs.length === 0 ? <div style={{ padding: 20, textAlign: 'center', font: '400 13px var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>No reporting GCs mapped.</div> : null}
+            </Card>
           </div>
-        </Card>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <MetricTile label="Team HITs" value={gm.weightedHits.toFixed(1)} sub={`${gm.teamSize} GCs`} icon="users-three" accent={team.accent} />
+              <MetricTile label="GM target" value={gm.target || '—'} sub="Target sheet" icon="target" accent="var(--sd-primary)" />
+              <MetricTile label="Output %" value={gm.outputPct == null ? '—' : I.pct(gm.outputPct, 1)} sub="(HITs÷Target)×25%" icon="percent" accent="var(--sd-violet-700)" />
+              <MetricTile label="Ops mult" value={'×' + gm.opsMult.toFixed(2)} sub={gm.opsRule} icon="arrows-down-up" accent={opsColor} />
+            </div>
+            <Card variant="regular" padding={18}>
+              <div style={{ font: '700 14px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', marginBottom: 12 }}>GC Ops multiplier</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {[['All GCs Green', '1.50×', 1.5], ['GC Yellow, none Red', '1.20×', 1.2], ['Any GC Red', '0.70×', 0.7]].map((r) => {
+                  const active = Math.abs(gm.opsMult - r[2]) < 0.001;
+                  return (
+                    <div key={r[0]} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 'var(--sd-radius-md)', background: active ? 'var(--sd-accent-1)' : 'transparent', border: active ? '1px solid var(--sd-primary)' : '1px solid var(--sd-stroke)' }}>
+                      <span style={{ flex: 1, font: '600 12px/1 var(--sd-font-sans)', color: active ? 'var(--sd-primary)' : 'var(--sd-fg-2)' }}>{r[0]}</span>
+                      <span className="sd-num" style={{ font: '700 13px/1 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>{r[1]}</span>
+                      {active ? <Icon name="check" size={14} style={{ color: 'var(--sd-primary)' }} /> : null}
+                    </div>
+                  );
+                })}
+              </div>
+              {gm.is1k5k ? <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 'var(--sd-radius-md)', background: 'var(--sd-orange-50)', font: '500 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-orange-900)' }}><Icon name="info" size={13} style={{ marginRight: 5, verticalAlign: '-2px' }} />1k–5k GM: GL kicker (1/5 of GL incentive) will be added once the GL incentive logic is defined.</div> : null}
+            </Card>
+          </div>
+        </div>
       </div>
     );
   }

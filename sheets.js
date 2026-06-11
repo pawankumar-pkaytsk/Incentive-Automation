@@ -134,7 +134,8 @@
 
     // blank month records + handover attribution
     people.forEach((p) => MONTHS.forEach((m) => p.byMonth[m.key] = { key: m.key, label: m.label, month: m.month, year: m.year, counted: [], disposed: [] }));
-    row('handover').forEach((r) => { const c = SHEETS.handover.col; const sid = String(r[c.sellerId]).trim(); const gc = resolve(r[c.gcName]); const master = hm[sid]; if (!master || !gc) return; const mObj = MONTHS.find((m) => m.month === master.month && m.year === master.year); if (!mObj) return; const is3w = !!threeWeek[sid]; const ho = String(r[c.handover]).toUpperCase() === 'TRUE' || r[c.handover] === true; const rr = { sellerId: sid, sellerName: master.name, hitMonthName: mObj.label.split(' ')[0], hitYear: master.year, threeWeek: is3w, handover: ho }; if (ho) gc.byMonth[mObj.key].counted.push(rr); else gc.byMonth[mObj.key].disposed.push(rr); });
+    const gmHits = {}; // gmEmail|monthKey -> [{sellerId, sellerName, threeWeek}] (col F = GM)
+    row('handover').forEach((r) => { const c = SHEETS.handover.col; const sid = String(r[c.sellerId]).trim(); const gc = resolve(r[c.gcName]); const master = hm[sid]; if (!master) return; const mObj = MONTHS.find((m) => m.month === master.month && m.year === master.year); if (!mObj) return; const is3w = !!threeWeek[sid]; const ho = String(r[c.handover]).toUpperCase() === 'TRUE' || r[c.handover] === true; const rr = { sellerId: sid, sellerName: master.name, hitMonthName: mObj.label.split(' ')[0], hitYear: master.year, threeWeek: is3w, handover: ho }; if (gc) { if (ho) gc.byMonth[mObj.key].counted.push(rr); else gc.byMonth[mObj.key].disposed.push(rr); } if (ho) { const gm = resolve(r[c.gmName]); if (gm) { const k = gm.email + '|' + mObj.key; (gmHits[k] || (gmHits[k] = [])).push({ sellerId: sid, sellerName: master.name, hitMonthName: mObj.label.split(' ')[0], hitYear: master.year, threeWeek: is3w }); } } });
 
     // finalise each month per person
     people.forEach((p) => MONTHS.forEach((m) => {
@@ -180,8 +181,40 @@
       });
     }));
 
-    // GM rollup
-    people.filter((p) => p.role !== 'gc').forEach((gm) => { const team = descendants(gm).filter((d) => d.role === 'gc'); MONTHS.forEach((m) => { const recs = team.map((d) => d.byMonth[m.key]); const weighted = recs.reduce((s, r) => s + r.weightedHits, 0); const raw = recs.reduce((s, r) => s + r.rawHits, 0); const tgt = targets[gm.email + '|' + m.month + '|' + m.year] ? targets[gm.email + '|' + m.month + '|' + m.year].target : Math.round(recs.reduce((s, r) => s + r.target, 0) * 0.9); gm.byMonth[m.key].gm = { weightedHits: weighted, rawHits: raw, target: tgt, achievementPct: tgt > 0 ? (weighted / tgt) * 100 : null, teamSize: team.length }; }); });
+    // GM incentive — achievement from handover col F (3-week ×1.5), target
+    // from target sheet, Output = (HITs ÷ Target) × 25%, then GC-Ops multiplier
+    // across reporting GCs: any Red→0.70, else any Yellow→1.20, else all Green→1.50.
+    const gmOpsMult = (gcs, mKey) => {
+      const bands = gcs.map((d) => d.byMonth[mKey].gcBand).filter(Boolean);
+      if (!bands.length) return { mult: 1, rule: 'No GC ops data', g: 0, y: 0, r: 0 };
+      const r = bands.filter((b) => b === 'Red').length, y = bands.filter((b) => b === 'Yellow').length, g = bands.filter((b) => b === 'Green').length;
+      if (r > 0) return { mult: 0.70, rule: 'Any GC Red', g, y, r };
+      if (y > 0) return { mult: 1.20, rule: 'GC Yellow, none Red', g, y, r };
+      return { mult: 1.50, rule: 'All GCs Green', g, y, r };
+    };
+    people.filter((p) => p.role !== 'gc').forEach((gm) => {
+      const gcs = descendants(gm).filter((d) => d.role === 'gc');
+      const is1k5k = gcs.some((d) => d.team === 'midmarket');
+      MONTHS.forEach((m) => {
+        const hits = gmHits[gm.email + '|' + m.key] || [];
+        const weighted = hits.reduce((s, x) => s + (x.threeWeek ? 1.5 : 1), 0);
+        const raw = hits.length;
+        const threeWk = hits.filter((x) => x.threeWeek);
+        const tgt = targets[gm.email + '|' + m.month + '|' + m.year] ? targets[gm.email + '|' + m.month + '|' + m.year].target : 0;
+        const achievementPct = tgt > 0 ? (weighted / tgt) * 100 : null;
+        const output = tgt > 0 ? (weighted / tgt) * 25 : null;          // (HITs ÷ Target) × 25%
+        const ops = gmOpsMult(gcs, m.key);
+        const finalPct = output == null ? null : output * ops.mult;
+        gm.byMonth[m.key].gm = {
+          weightedHits: weighted, rawHits: raw, threeWeekCounted: threeWk, counted: hits,
+          target: tgt, achievementPct, outputPct: output,
+          opsMult: ops.mult, opsRule: ops.rule, opsGreen: ops.g, opsYellow: ops.y, opsRed: ops.r,
+          finalPct, teamSize: gcs.length,
+          is1k5k, kickerPct: 0, kickerNote: is1k5k ? 'GL kicker (1/5 of GL incentive) pending GL logic' : '',
+          dataHealth: tgt === 0 ? 'missing' : 'ok',
+        };
+      });
+    });
 
     // PIP — 2 months BEFORE the latest month; Core & Hypercare GCs only;
     // skip new GCs lacking a target in either month. (Re-evaluated on period

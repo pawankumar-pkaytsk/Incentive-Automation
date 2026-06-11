@@ -8,6 +8,8 @@ const RosterRow = ({ person, onOpen, index }) => {
   const [hover, setHover] = React.useState(false);
   const m = I.cur(person);
   const team = I.TEAMS[person.team];
+  const isGM = person.role !== 'gc' && person.logic !== 'kae';
+  const src = isGM ? (m.gm || { achievementPct: null, weightedHits: 0, finalPct: null }) : m;
   return (
     <div onClick={() => onOpen(person)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ display: 'grid', gridTemplateColumns: '2.4fr 1.5fr 1fr 1.2fr', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', background: hover ? 'var(--sd-bg-hover)' : 'transparent', borderTop: '1px solid var(--sd-stroke)', transition: 'background 120ms ease', animation: 'fadeUp 380ms ease both', animationDelay: `${Math.min(index * 20, 360)}ms` }}>
@@ -24,18 +26,20 @@ const RosterRow = ({ person, onOpen, index }) => {
       <div>
         {person.logic === 'kae' ? (
           <span className="sd-num" style={{ font: '600 13px var(--sd-font-sans)', color: m.strikeCount ? 'var(--sd-red-500)' : 'var(--sd-green-700)' }}>{m.strikeCount} strike{m.strikeCount === 1 ? '' : 's'}</span>
-        ) : m.achievementPct != null ? (
+        ) : src.achievementPct != null ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ flex: 1, maxWidth: 80 }}><ProgressBar pct={Math.min(100, m.achievementPct)} color={m.achievementPct >= 90 ? 'var(--sd-green-700)' : m.achievementPct >= 50 ? team.accent : 'var(--sd-red-500)'} delay={index * 18} /></div>
-            <span className="sd-num" style={{ font: '600 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-1)' }}>{m.achievementPct.toFixed(0)}%</span>
+            <div style={{ flex: 1, maxWidth: 80 }}><ProgressBar pct={Math.min(100, src.achievementPct)} color={src.achievementPct >= 90 ? 'var(--sd-green-700)' : src.achievementPct >= 50 ? team.accent : 'var(--sd-red-500)'} delay={index * 18} /></div>
+            <span className="sd-num" style={{ font: '600 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-1)' }}>{src.achievementPct.toFixed(0)}%</span>
           </div>
         ) : <span style={{ font: '400 13px var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>—</span>}
       </div>
-      <div className="sd-num" style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.logic === 'kae' ? '—' : m.weightedHits.toFixed(1)}</div>
+      <div className="sd-num" style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.logic === 'kae' ? '—' : src.weightedHits.toFixed(1)}</div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         {person.logic === 'kae'
           ? <span className="sd-num" style={{ font: '700 14px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}>{I.inr(m.amount)}</span>
-          : <span className="sd-num" style={{ font: '700 14px/1 var(--sd-font-sans)', color: m.finalPct != null ? 'var(--sd-primary)' : 'var(--sd-red-500)' }}>{m.finalPct != null ? I.pct(I.finalPctWithAdhoc(person), 1) : 'Pending'}</span>}
+          : isGM
+            ? <span className="sd-num" style={{ font: '700 14px/1 var(--sd-font-sans)', color: src.finalPct != null ? 'var(--sd-primary)' : 'var(--sd-red-500)' }}>{src.finalPct != null ? I.pct(src.finalPct, 1) : 'Pending'}</span>
+            : <span className="sd-num" style={{ font: '700 14px/1 var(--sd-font-sans)', color: m.finalPct != null ? 'var(--sd-primary)' : 'var(--sd-red-500)' }}>{m.finalPct != null ? I.pct(I.finalPctWithAdhoc(person), 1) : 'Pending'}</span>}
         <Icon name="caret-right" size={15} style={{ color: hover ? 'var(--sd-primary)' : 'var(--sd-lowlight-2)', transition: 'color 120ms' }} />
       </div>
     </div>
