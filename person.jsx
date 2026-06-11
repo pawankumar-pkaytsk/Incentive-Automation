@@ -176,7 +176,7 @@ const PersonView = ({ person, viewer, onBack, onChange }) => {
                 })}
               </div>
             </Card>
-            <AdhocEditor person={person} canEdit={canEdit} onChange={onChange} />
+            
           </div>
         </div>
       </div>
@@ -223,7 +223,7 @@ const PersonView = ({ person, viewer, onBack, onChange }) => {
               <HypercareSchedule hits={m.weightedHits} />
             </Card>
             {person.pip.flagged ? <PIPCard person={person} /> : null}
-            <AdhocEditor person={person} canEdit={canEdit} onChange={onChange} />
+            
           </div>
         </div>
       </div>
@@ -287,7 +287,7 @@ const PersonView = ({ person, viewer, onBack, onChange }) => {
             <CoreBandTable active={m.coreBand} />
           </Card>
           {person.pip.flagged ? <PIPCard person={person} /> : null}
-          <AdhocEditor person={person} canEdit={canEdit} onChange={onChange} />
+          
         </div>
       </div>
     </div>

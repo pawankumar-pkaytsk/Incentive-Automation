@@ -127,8 +127,8 @@ const AdminView = ({ viewer, onOpenPerson, onBack, initialTab = 'health' }) => {
   const missing = flagged.filter((p) => I.cur(p).dataHealth === 'missing');
   const attention = flagged.filter((p) => I.cur(p).dataHealth === 'attention');
   const pip = I.pipPeople();
-  const pipGC = pip.filter((p) => !p.pip.isGM);
-  const pipGM = pip.filter((p) => p.pip.isGM);
+  const pipCore = pip.filter((p) => p.team === 'core');
+  const pipHyper = pip.filter((p) => p.team === 'hypercare');
   const avgFinal = I.avgFinalPct(I.people);
   const computable = I.people.filter((p) => I.cur(p).finalPct != null);
   const readiness = Math.round((computable.length / I.people.length) * 100);
@@ -161,7 +161,7 @@ const AdminView = ({ viewer, onOpenPerson, onBack, initialTab = 'health' }) => {
     <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 16, borderBottom: '1px solid var(--sd-stroke)' }}>
         <span style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--sd-red-500)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="flag" size={18} /></span>
-        <div style={{ flex: 1 }}><div style={{ font: '700 15px/1.2 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>{title}</div><div style={{ font: '400 12px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginTop: 2 }}>2-month achievement &lt; {threshold}% (3-week counts as 1)</div></div>
+        <div style={{ flex: 1 }}><div style={{ font: '700 15px/1.2 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>{title}</div><div style={{ font: '400 12px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginTop: 2 }}>Prior 2 months&rsquo; achievement &lt; {threshold}% &middot; 3-week counts as 1</div></div>
         <span className="sd-num" style={{ font: '700 18px/1 var(--sd-font-sans)', color: 'var(--sd-red-500)' }}>{list.length}</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 0.4fr', gap: 10, padding: '9px 16px', background: 'var(--sd-bg-app)', font: '600 10px/1 var(--sd-font-sans)', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sd-fg-2)' }}>
@@ -227,8 +227,8 @@ const AdminView = ({ viewer, onOpenPerson, onBack, initialTab = 'health' }) => {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
-          <PipGroup title="GCs eligible for PIP" list={pipGC} threshold={50} role="GC" />
-          <PipGroup title="GMs eligible for PIP" list={pipGM} threshold={70} role="GM" />
+          <PipGroup title="Core GCs eligible for PIP" list={pipCore} threshold={50} role="Core GC" />
+          <PipGroup title="Hypercare GCs eligible for PIP" list={pipHyper} threshold={50} role="Hypercare GC" />
         </div>
       )}
     </div>

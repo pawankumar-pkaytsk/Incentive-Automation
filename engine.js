@@ -276,26 +276,29 @@
     });
   });
 
-  /* ---- PIP evaluation (2 months ending at viewed period, raw hits) --- */
-  function monthsUpTo(periodKey, n = 2) {
+  /* ---- PIP evaluation -----------------------------------------------
+     Looks at the 2 months STRICTLY BEFORE the selected month (e.g. view
+     June → April+May). Eligible only for Core GC and Hypercare GC.
+     Skips "new" GCs who lack a target in either of those two months.   */
+  function monthsBefore(periodKey, n = 2) {
     const idx = MONTHS.findIndex((m) => m.key === periodKey);
     const end = idx < 0 ? MONTHS.length - 1 : idx;
-    return MONTHS.slice(Math.max(0, end - n + 1), end + 1);
+    return MONTHS.slice(Math.max(0, end - n), end); // n months before, excluding selected
   }
   function evaluatePIP(p, periodKey) {
-    const months = monthsUpTo(periodKey, 2);
-    if (p.team === 'kae') return { isGM: false, threshold: null, sumAch: 0, sumTgt: 0, ratio: null, flagged: false, months: months.map((m) => m.label), na: true };
-    const isGM = p.role !== 'gc';
-    const threshold = isGM ? 70 : 50;
+    const months = monthsBefore(periodKey, 2);
+    const labels = months.map((m) => m.label);
+    const eligible = p.role === 'gc' && (p.team === 'core' || p.team === 'hypercare');
+    if (!eligible) return { eligible: false, flagged: false, ratio: null, threshold: 50, months: labels, na: true, reason: 'PIP applies to Core & Hypercare GCs only' };
+    if (months.length < 2) return { eligible: true, flagged: false, ratio: null, threshold: 50, months: labels, na: true, reason: 'Not enough history' };
+    const recs = months.map((m) => p.byMonth[m.key]);
+    // New GC: must have a target in BOTH months, else not applicable.
+    if (!recs.every((r) => r && r.target > 0)) return { eligible: true, flagged: false, ratio: null, threshold: 50, months: labels, na: true, reason: 'New GC — target in only one of the two months' };
     let sumAch = 0, sumTgt = 0;
-    months.forEach((m) => {
-      const rec = p.byMonth[m.key];
-      if (isGM && rec.gm) { sumAch += rec.gm.rawHits; sumTgt += rec.gm.target; }
-      else { sumAch += rec.rawHits; sumTgt += rec.target; }
-    });
+    recs.forEach((r) => { sumAch += r.rawHits; sumTgt += r.target; }); // rawHits: 3-week counts as 1
     const ratio = sumTgt > 0 ? (sumAch / sumTgt) * 100 : null;
-    const flagged = ratio != null && ratio < threshold;
-    return { isGM, threshold, sumAch, sumTgt, ratio, flagged, months: months.map((m) => m.label) };
+    const threshold = 50;
+    return { eligible: true, isGM: false, threshold, sumAch, sumTgt, ratio, flagged: ratio != null && ratio < threshold, months: labels };
   }
   /* ---- Active period + accessors (switchable in the header) ---------- */
   let activeKey = MONTHS[MONTHS.length - 1].key;
@@ -354,7 +357,7 @@
   /* ---- Extend the global API ----------------------------------------- */
   Object.assign(I, {
     CORE_BANDS, coreBand, HYPERCARE_SCHEDULE, hypercareCumulative, INPUTS, bandOf, multiplierFromBands,
-    logicFor, cur, finalPctWithAdhoc, setPeriod, monthsUpTo, activeKey,
+    logicFor, cur, finalPctWithAdhoc, setPeriod, monthsBefore, activeKey,
     teamMembers, avgFinalPct, teamSummary, allTeamSummaries, flaggedPeople, pipPeople, evaluatePIP,
     CURKEY,
   });

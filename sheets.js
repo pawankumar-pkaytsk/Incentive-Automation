@@ -183,14 +183,20 @@
     // GM rollup
     people.filter((p) => p.role !== 'gc').forEach((gm) => { const team = descendants(gm).filter((d) => d.role === 'gc'); MONTHS.forEach((m) => { const recs = team.map((d) => d.byMonth[m.key]); const weighted = recs.reduce((s, r) => s + r.weightedHits, 0); const raw = recs.reduce((s, r) => s + r.rawHits, 0); const tgt = targets[gm.email + '|' + m.month + '|' + m.year] ? targets[gm.email + '|' + m.month + '|' + m.year].target : Math.round(recs.reduce((s, r) => s + r.target, 0) * 0.9); gm.byMonth[m.key].gm = { weightedHits: weighted, rawHits: raw, target: tgt, achievementPct: tgt > 0 ? (weighted / tgt) * 100 : null, teamSize: team.length }; }); });
 
-    // PIP (last 2 months)
+    // PIP — 2 months BEFORE the latest month; Core & Hypercare GCs only;
+    // skip new GCs lacking a target in either month. (Re-evaluated on period
+    // switch by engine.setPeriod → evaluatePIP.)
+    const pipMonths = MONTHS.slice(Math.max(0, MONTHS.length - 3), MONTHS.length - 1);
+    const pipLabels = pipMonths.map((m) => m.label);
     people.forEach((p) => {
-      const months = MONTHS.slice(-2);
-      if (p.team === 'kae') { p.pip = { isGM: false, threshold: null, sumAch: 0, sumTgt: 0, ratio: null, flagged: false, months: months.map((m) => m.label), na: true }; return; }
-      const isGM = p.role !== 'gc', threshold = isGM ? 70 : 50; let a = 0, t = 0;
-      months.forEach((m) => { const rec = p.byMonth[m.key]; if (isGM && rec.gm) { a += rec.gm.rawHits; t += rec.gm.target; } else { a += rec.rawHits; t += rec.target; } });
+      const eligible = p.role === 'gc' && (p.team === 'core' || p.team === 'hypercare');
+      if (!eligible) { p.pip = { eligible: false, flagged: false, ratio: null, threshold: 50, months: pipLabels, na: true, reason: 'PIP applies to Core & Hypercare GCs only' }; return; }
+      if (pipMonths.length < 2) { p.pip = { eligible: true, flagged: false, ratio: null, threshold: 50, months: pipLabels, na: true, reason: 'Not enough history' }; return; }
+      const recs = pipMonths.map((m) => p.byMonth[m.key]);
+      if (!recs.every((r) => r && r.target > 0)) { p.pip = { eligible: true, flagged: false, ratio: null, threshold: 50, months: pipLabels, na: true, reason: 'New GC — target in only one of the two months' }; return; }
+      let a = 0, t = 0; recs.forEach((r) => { a += r.rawHits; t += r.target; });
       const ratio = t > 0 ? (a / t) * 100 : null;
-      p.pip = { isGM, threshold, sumAch: a, sumTgt: t, ratio, flagged: ratio != null && ratio < threshold, months: months.map((m) => m.label) };
+      p.pip = { eligible: true, isGM: false, threshold: 50, sumAch: a, sumTgt: t, ratio, flagged: ratio != null && ratio < 50, months: pipLabels };
     });
 
     return { people, MONTHS };
@@ -244,9 +250,10 @@
     const token = await getToken();
     say('Verifying account…');
     const info = await userInfo(token);
-    say('Reading sheets…');
+    say('Reading all sheets…');
     const keys = Object.keys(SHEETS); const RAW = {};
-    for (let i = 0; i < keys.length; i++) { say('Reading ' + SHEETS[keys[i]].tab + ' (' + (i + 1) + '/' + keys.length + ')…'); RAW[keys[i]] = await fetchSheet(token, SHEETS[keys[i]]); }
+    const results = await Promise.all(keys.map((k) => fetchSheet(token, SHEETS[k]).then((rows) => ({ k, rows }))));
+    results.forEach(({ k, rows }) => { RAW[k] = rows; });
     say('Calculating incentives…');
     const { people, MONTHS } = computeAll(RAW);
     if (!people.length) throw new Error('People sheet returned no rows');
