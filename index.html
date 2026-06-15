@@ -50,6 +50,8 @@
     @keyframes pulse { 0%,100% { opacity: 0.3; transform: scale(0.8);} 50% { opacity: 1; transform: scale(1);} }
     @keyframes sdspin { to { transform: rotate(360deg); } }
     .sd-spin { animation: sdspin 0.7s linear infinite; }
+    @keyframes sddot { 0%,80%,100% { opacity: 0.25; transform: translateY(0);} 40% { opacity: 1; transform: translateY(-3px);} }
+    .sd-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--sd-primary); display: inline-block; animation: sddot 1s ease-in-out infinite; }
   </style>
 </head>
 <body>

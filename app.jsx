@@ -116,10 +116,14 @@ const EmailLogin = ({ onLogin }) => {
     } catch (e) {
       setBusy(false); setStatus('');
       const msg = String(e && e.message || e);
-      if (detectInApp() || /disallowed_useragent|403.*useragent/i.test(msg)) setErr('__INAPP__');
-      else if (/popup|denied|closed|interaction|oauth_error/i.test(msg)) setErr('Sign-in was cancelled or blocked. Please try again — and make sure pop-ups are allowed.');
+      const code = (e && e.code) || '';
+      if (code === 'SCOPE_INSUFFICIENT' || /\[SCOPE_INSUFFICIENT\]/.test(msg)) setErr('Sign-in didn’t include permission to read Google Sheets. Tap “Continue with Google” again and on the Google screen, make sure the checkbox for seeing your Google Sheets is ticked.');
+      else if (code === 'API_DISABLED' || /\[API_DISABLED\]/.test(msg)) setErr('__APIDISABLED__');
+      else if (code === 'NO_ACCESS' || /\[NO_ACCESS\]/.test(msg)) setErr('Signed in as this account, but it can’t read “' + (e && e.tab || 'a sheet') + '”. Make sure your company account has at least view access to all 9 sheets, then retry.');
+      else if (code === 'TOKEN_EXPIRED' || /\[TOKEN_EXPIRED\]/.test(msg)) setErr('Your session expired. Please sign in again.');
+      else if (detectInApp() || /disallowed_useragent|useragent/i.test(msg)) setErr('__INAPP__');
       else if (/origin_mismatch|redirect_uri|idpiframe|invalid.*origin/i.test(msg)) setErr('This site’s web address isn’t authorised in Google yet. Send this exact URL to your admin: ' + (window.location && window.location.origin));
-      else if (/403|PERMISSION|forbidden/i.test(msg)) setErr('Signed in, but this account can’t read one of the sheets. Ask for view access, then retry.');
+      else if (/popup|closed|interaction|oauth_error|access_denied/i.test(msg)) setErr('Sign-in was cancelled or blocked. Please try again — and make sure pop-ups are allowed.');
       else setErr('Could not load data: ' + msg);
     }
   };
@@ -148,14 +152,21 @@ const EmailLogin = ({ onLogin }) => {
             </button>
           </div>
         ) : null}
-        <button onClick={signIn} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: 'var(--sd-white)', border: '1px solid var(--sd-border)', borderRadius: 'var(--sd-radius-md)', padding: '12px 16px', font: '600 14px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.7 : 1, boxShadow: 'var(--sd-shadow-soft)' }}>
-          <GoogleG size={18} />{busy ? 'Working…' : 'Continue with Google'}
+        <button onClick={signIn} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: busy ? 'var(--sd-accent-1)' : 'var(--sd-white)', border: '1px solid ' + (busy ? 'var(--sd-accent-2)' : 'var(--sd-border)'), borderRadius: 'var(--sd-radius-md)', padding: '12px 16px', font: '600 14px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', cursor: busy ? 'default' : 'pointer', boxShadow: 'var(--sd-shadow-soft)', transition: 'background 160ms, border-color 160ms' }}>
+          {busy ? <span className="sd-spin" style={{ width: 16, height: 16, border: '2px solid var(--sd-accent-2)', borderTopColor: 'var(--sd-primary)', borderRadius: '50%', display: 'inline-block' }}></span> : <GoogleG size={18} />}{busy ? 'Loading…' : 'Continue with Google'}
         </button>
-        {busy && status ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, font: '500 12px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}><span className="sd-spin" style={{ width: 13, height: 13, border: '2px solid var(--sd-accent-2)', borderTopColor: 'var(--sd-primary)', borderRadius: '50%', display: 'inline-block' }}></span>{status}</div> : null}
+        {busy && status ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, font: '500 12px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}><span style={{ display: 'inline-flex', gap: 3 }}><span className="sd-dot" style={{ animationDelay: '0ms' }}></span><span className="sd-dot" style={{ animationDelay: '160ms' }}></span><span className="sd-dot" style={{ animationDelay: '320ms' }}></span></span>{status}</div> : null}
         {err === '__INAPP__' ? (
           <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 'var(--sd-radius-md)', background: 'var(--sd-yellow-50)', border: '1px solid var(--sd-yellow-200)' }}>
             <p style={{ font: '600 12px/1.5 var(--sd-font-sans)', color: 'var(--sd-yellow-900)', margin: '0 0 10px' }}>Google blocks sign-in inside in-app browsers. Open this page in Chrome or Safari, then sign in.</p>
             <button onClick={copyLink} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'var(--sd-white)', border: '1px solid var(--sd-border)', borderRadius: 'var(--sd-radius-md)', padding: '9px 14px', font: '600 13px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', cursor: 'pointer' }}><Icon name={copied ? 'check' : 'copy'} size={15} />{copied ? 'Link copied' : 'Copy link'}</button>
+          </div>
+        ) : err === '__APIDISABLED__' ? (
+          <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 'var(--sd-radius-md)', background: 'var(--sd-red-50)', border: '1px solid var(--sd-red-200)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}><Icon name="warning" size={16} style={{ color: 'var(--sd-red-700)' }} /><span style={{ font: '700 13px/1.2 var(--sd-font-sans)', color: 'var(--sd-red-900)' }}>Google Sheets API isn’t enabled</span></div>
+            <p style={{ font: '400 12px/1.5 var(--sd-font-sans)', color: 'var(--sd-fg-2)', margin: '0 0 10px' }}>You signed in fine, but project <strong>incentive-498110</strong> hasn’t enabled the Sheets API, so data can’t be read. An admin needs to enable it once:</p>
+            <a href="https://console.cloud.google.com/apis/library/sheets.googleapis.com?project=incentive-498110" target="_blank" rel="noopener" style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'var(--sd-primary)', color: '#fff', borderRadius: 'var(--sd-radius-md)', padding: '10px 14px', font: '600 13px/1 var(--sd-font-sans)', textDecoration: 'none' }}><Icon name="arrow-square-out" size={15} />Enable Sheets API</a>
+            <p style={{ font: '400 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-3)', margin: '8px 0 0' }}>Click <strong>Enable</strong>, wait ~1 minute, then retry sign-in.</p>
           </div>
         ) : err ? <div style={{ marginTop: 16, padding: '10px 12px', borderRadius: 'var(--sd-radius-md)', background: 'var(--sd-red-50)', color: 'var(--sd-red-900)', font: '500 12px/1.5 var(--sd-font-sans)', wordBreak: 'break-word' }}>{err}</div> : null}
         <p style={{ font: '400 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-lowlight-2)', marginTop: 16, textAlign: 'center' }}>Company Google account required · read-only access to incentive sheets.</p>

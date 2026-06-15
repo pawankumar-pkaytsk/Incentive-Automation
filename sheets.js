@@ -255,13 +255,21 @@
     tokenClient = google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPES, callback: () => {} });
     return tokenClient;
   }
-  function getToken() {
+  function getToken(forceConsent) {
     return new Promise((resolve, reject) => {
       let tc;
       try { tc = ensureClient(); } catch (e) { return reject(e); }
-      tc.callback = (resp) => { if (resp && resp.access_token) { accessToken = resp.access_token; resolve(resp.access_token); } else reject(new Error(resp && resp.error ? resp.error : 'no_token')); };
+      tc.callback = (resp) => {
+        if (resp && resp.access_token) {
+          accessToken = resp.access_token;
+          // Verify the Sheets scope was actually granted; if not, signal a re-consent.
+          const scopes = String(resp.scope || '');
+          if (!/spreadsheets/.test(scopes)) { const e = new Error('[SCOPE_INSUFFICIENT] sheets scope not granted'); e.code = 'SCOPE_INSUFFICIENT'; return reject(e); }
+          resolve(resp.access_token);
+        } else reject(new Error(resp && resp.error ? resp.error : 'no_token'));
+      };
       tc.error_callback = (err) => reject(new Error((err && err.type) || 'oauth_error'));
-      tc.requestAccessToken({ prompt: '' });
+      tc.requestAccessToken({ prompt: forceConsent ? 'consent' : '' });
     });
   }
   async function userInfo(token) {
@@ -271,7 +279,20 @@
   async function fetchSheet(token, cfg) {
     const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + cfg.id + '/values/' + encodeURIComponent(cfg.tab) + '?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING';
     const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-    if (!r.ok) { const txt = await r.text().catch(() => ''); throw new Error(cfg.tab + ': ' + r.status + ' ' + txt.slice(0, 120)); }
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      let reason = '', status = '';
+      try { const j = JSON.parse(txt); reason = (j.error && (j.error.status || (j.error.errors && j.error.errors[0] && j.error.errors[0].reason))) || ''; status = j.error && j.error.message || ''; } catch (e) {}
+      const blob = (txt || '').toLowerCase();
+      let code = 'SHEET_ERR';
+      if (r.status === 403 && (blob.includes('insufficient authentication scopes') || blob.includes('access_token_scope_insufficient') || reason === 'ACCESS_TOKEN_SCOPE_INSUFFICIENT')) code = 'SCOPE_INSUFFICIENT';
+      else if (r.status === 403 && (blob.includes('has not been used') || blob.includes('service_disabled') || blob.includes('it is disabled') || reason === 'SERVICE_DISABLED')) code = 'API_DISABLED';
+      else if (r.status === 403) code = 'NO_ACCESS';        // PERMISSION_DENIED — caller lacks sheet access
+      else if (r.status === 401) code = 'TOKEN_EXPIRED';
+      const err = new Error('[' + code + '] ' + cfg.tab + ' (' + r.status + ') ' + (status || '').slice(0, 140));
+      err.code = code; err.tab = cfg.tab; err.httpStatus = r.status;
+      throw err;
+    }
     const j = await r.json(); const vals = j.values || []; return vals.length ? vals.slice(1) : []; // drop header row
   }
 
@@ -280,13 +301,24 @@
     const say = (m) => { try { onStatus && onStatus(m); } catch (e) {} };
     if (!CLIENT_ID) throw new Error('Missing GOOGLE_CLIENT_ID');
     say('Opening Google sign-in…');
-    const token = await getToken();
+    let token, forced = false;
+    try { token = await getToken(false); }
+    catch (e) { if (e && e.code === 'SCOPE_INSUFFICIENT') { say('Requesting Sheets access…'); token = await getToken(true); forced = true; } else throw e; }
     say('Verifying account…');
     const info = await userInfo(token);
     say('Reading all sheets…');
     const keys = Object.keys(SHEETS); const RAW = {};
-    const results = await Promise.all(keys.map((k) => fetchSheet(token, SHEETS[k]).then((rows) => ({ k, rows }))));
-    results.forEach(({ k, rows }) => { RAW[k] = rows; });
+    let results = await Promise.allSettled(keys.map((k) => fetchSheet(token, SHEETS[k]).then((rows) => ({ k, rows }))));
+    let failed = results.filter((r) => r.status === 'rejected').map((r) => r.reason);
+    // If the cached grant was missing the Sheets scope, force a re-consent once and retry.
+    if (failed.some((x) => x && x.code === 'SCOPE_INSUFFICIENT') && !forced) {
+      say('Requesting Sheets access…');
+      token = await getToken(true);
+      results = await Promise.allSettled(keys.map((k) => fetchSheet(token, SHEETS[k]).then((rows) => ({ k, rows }))));
+      failed = results.filter((r) => r.status === 'rejected').map((r) => r.reason);
+    }
+    if (failed.length) { const e = failed.find((x) => x.code) || failed[0]; throw e; }   // surface the real classified error
+    results.forEach((r) => { RAW[r.value.k] = r.value.rows; });
     say('Calculating incentives…');
     const { people, MONTHS } = computeAll(RAW);
     if (!people.length) throw new Error('People sheet returned no rows');
