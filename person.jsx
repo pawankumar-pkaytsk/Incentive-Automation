@@ -375,7 +375,7 @@ const SpendLiveDetail = ({ rec, person }) => {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--sd-radius-md)', border: '1px solid var(--sd-stroke)' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ font: '600 13px/1.2 var(--sd-font-sans)', color: 'var(--sd-fg-1)' }}>{label}</div>
-          <div className="sd-num" style={{ font: '400 11px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginTop: 2 }}>closed/completed {data.done} ÷ total {data.total}</div>
+          <div className="sd-num" style={{ font: '400 11px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginTop: 2 }}>{kind === 'callback' ? 'done within SLA ' + data.done + ' ÷ total ' + data.total : 'closed/completed ' + data.done + ' ÷ total ' + data.total}</div>
         </div>
         <DrillNumber payload={payload} color={col} style={{ font: '700 16px/1 var(--sd-font-sans)' }}>{data.pct == null ? '—' : data.pct + '%'}</DrillNumber>
       </div>
@@ -416,7 +416,7 @@ const SpendLiveDetail = ({ rec, person }) => {
       ) : null}
       <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <Adher label="Task adherence" kind="task" data={tk} />
-        <Adher label="Callback adherence" kind="callback" data={cb} />
+        <Adher label="Callback adherence within SLA" kind="callback" data={cb} />
       </div>
     </Card>
   );

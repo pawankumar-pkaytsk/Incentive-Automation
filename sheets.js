@@ -19,13 +19,14 @@
     handover:   { id: '1ZLOcj648aYvVaEGHX_QHB1Qx3OMUT3K_eeW-SBUbCso', tab: 'handover',   col: { sellerId: 2, gcName: 4, gmName: 5, handover: 9 } },
     threeweek:  { id: '1i89A3_In2FGdfbc5HErMWquPFKfJLMcGekQBsYFfwZI', tab: '3weekgolive',col: { sellerId: 0 } },
     spend:      { id: '1wwfbMVkMKq80Znq1mkpO-NCLI-fc7d2hPIepCp04bQ0', tab: 'spendinputs',col: { date: 0, gcName: 1, live: 5, spend: 7 } },
-    tasks:      { id: '12rfk37xtBfletLM1w-gfeiuPZof5ctxnDy_75V5yL-o', tab: 'Task',       col: { subtask: 3, date: 6, gcName: 8, status: 12 } },
+    // NOTE: task/callback data no longer comes from a Google Sheet. It is pulled from
+    // Metabase card 10181 by incentive_task_refresh.py and served as task_data.json (see below).
     sos:        { id: '1SIww2UQnmcVs6lgLGYMxGLcxdCVf3MYkPZk7BfY3hIU', tab: 'sos',        col: { type: 0, sellerId: 1, date: 2, context: 3, gcName: 4, gmName: 5 } },
     strikes:    { id: '16JUSC2vOsG6SvN1-RhnFWZ5fdIrF1SyAYo_EiGbckkE', tab: 'Strikes_Log',col: { date: 1, kaeName: 2, kaeEmpId: 3, issue: 6 } },
   };
   const WINDOW_START_DAY = 20;
   const TASK_SUBS = ['internal_seller_escalation_general_request', 'pre-live-call', 'troubleshoot_manual_action'];
-  const CALL_SUBS = ['schedule_call', 'seller_callback_overdue_sub_task', 'seller_callback_primary_task'];
+  const CALL_SUBS = ['schedule_call'];   // Callback Adherence within SLA is measured on schedule_call only
   const DONE = ['closed', 'completed'];
   const WES_W = [{ m: 'social', w: 3 }, { m: 'sos', w: 1.5 }, { m: 'internal', w: 1 }];
 
@@ -56,7 +57,7 @@
   function hypercareCum(n) { let t = 0, i = 0, r = n; while (r > 0.0001) { const rate = i < HC_RATES.length ? HC_RATES[i] : HC_FLAT; const take = Math.min(1, r); t += rate * take; r -= take; i++; } return t; }
   const bandSpend = (v) => v > 80 ? 'green' : v >= 70 ? 'yellow' : 'red';
   const bandTask = (v) => v > 90 ? 'green' : v >= 70 ? 'yellow' : 'red';
-  const bandCall = (v) => v > 95 ? 'green' : v >= 75 ? 'yellow' : 'red';
+  const bandCall = (v) => v > 90 ? 'green' : v >= 75 ? 'yellow' : 'red';
   const bandWes = (v) => v < 25 ? 'green' : v <= 45 ? 'yellow' : 'red';
   function multiplier(b) { const n = b.length, g = b.filter(x => x === 'green').length, y = b.filter(x => x === 'yellow').length, r = b.filter(x => x === 'red').length; if (!n) return { mult: 1, gcBand: null, rule: 'no inputs' }; if (r === n) return { mult: 0, gcBand: 'Red', rule: 'All ' + n + ' Red' }; if (r >= 2) return { mult: 0.70, gcBand: 'Red', rule: r + ' Reds' }; if (r === 1) return { mult: 0.85, gcBand: 'Red', rule: 'Exactly 1 Red' }; if (g === n) return { mult: 1.50, gcBand: 'Green', rule: 'All ' + n + ' Green' }; if (y === n) return { mult: 1.00, gcBand: 'Yellow', rule: 'All ' + n + ' Yellow' }; return { mult: 1.30, gcBand: 'Yellow', rule: 'Mix Green & Yellow, no Red' }; }
   const KAE_BASE = 6000;
@@ -120,9 +121,34 @@
     // spend/live
     const spendByPM = {}; row('spend').forEach((r) => { const c = SHEETS.spend.col; const who = resolve(r[c.gcName]); if (!who) return; const d = toDate(r[c.date]); if (!d) return; const live = Number(r[c.live]) || 0, sp = Number(r[c.spend]) || 0; MONTHS.forEach((m) => { if (!inWindow(d, windowFor(m.month, m.year))) return; const key = who.email + '|' + m.key; const rec = spendByPM[key] || (spendByPM[key] = { sumLive: 0, sumSpend: 0, days: [] }); rec.sumLive += live; rec.sumSpend += sp; rec.days.push({ date: fmtDate(d), live: live, spend: sp, ratio: live > 0 ? +(sp / live * 100).toFixed(1) : null }); }); });
 
-    // task + callback
+    // task + callback — sourced from the Metabase snapshot (task_data.json, card 10181),
+    // each entry: { st:sub_type, gc:assignee_name, status, cr:created(YYYY-MM-DD), sla:sla_in_min, tat }.
+    // Task Adherence = closed/completed ÷ total. Callback Adherence *within SLA* = schedule_call
+    // tasks that are done AND on time (tat <= sla_in_min) ÷ total schedule_call tasks.
     const taskByPM = {}, callByPM = {}; const bucket = (s, k) => s[k] || (s[k] = { done: 0, total: 0, rows: [] });
-    row('tasks').forEach((r) => { const c = SHEETS.tasks.col; const who = resolve(r[c.gcName]); if (!who) return; const d = toDate(r[c.date]); if (!d) return; const sub = String(r[c.subtask] || '').trim().toLowerCase(); const st = String(r[c.status] || '').trim().toLowerCase(); const done = DONE.indexOf(st) >= 0; const isT = TASK_SUBS.indexOf(sub) >= 0, isC = CALL_SUBS.indexOf(sub) >= 0; if (!isT && !isC) return; MONTHS.forEach((m) => { if (!inWindow(d, windowFor(m.month, m.year))) return; const store = (isT ? bucket(taskByPM, who.email + '|' + m.key) : bucket(callByPM, who.email + '|' + m.key)); store.total++; if (done) store.done++; store.rows.push({ date: fmtDate(d), subtask: sub, status: st, done: done }); }); });
+    row('tasks').forEach((t) => {
+      const who = resolve(t.gc); if (!who) return;
+      const d = toDate(t.cr); if (!d) return;
+      const sub = String(t.st || '').trim().toLowerCase();
+      const stt = String(t.status || '').trim().toLowerCase();
+      const done = DONE.indexOf(stt) >= 0;
+      const isT = TASK_SUBS.indexOf(sub) >= 0, isC = CALL_SUBS.indexOf(sub) >= 0;
+      if (!isT && !isC) return;
+      const sla = t.sla == null ? null : Number(t.sla), tat = t.tat == null ? null : Number(t.tat);
+      const withinSla = done && sla != null && tat != null && tat <= sla;
+      MONTHS.forEach((m) => {
+        if (!inWindow(d, windowFor(m.month, m.year))) return;
+        if (isT) {
+          const store = bucket(taskByPM, who.email + '|' + m.key);
+          store.total++; if (done) store.done++;
+          store.rows.push({ date: fmtDate(d), subtask: sub, status: stt, done: done });
+        } else {
+          const store = bucket(callByPM, who.email + '|' + m.key);
+          store.total++; if (withinSla) store.done++;
+          store.rows.push({ date: fmtDate(d), subtask: sub, status: stt, done: withinSla, sla: sla, tat: tat });
+        }
+      });
+    });
 
     // SOS → WES (dedupe same seller/day/type)
     const wesByPM = {}, seen = {};
@@ -319,6 +345,15 @@
     }
     if (failed.length) { const e = failed.find((x) => x.code) || failed[0]; throw e; }   // surface the real classified error
     results.forEach((r) => { RAW[r.value.k] = r.value.rows; });
+    // Task + Callback (within SLA) come from the Metabase snapshot committed to the repo
+    // (task_data.json, refreshed from card 10181). Same-origin, no auth — read it directly.
+    say('Loading task / callback data…');
+    try {
+      const tr = await fetch('task_data.json?_=' + Date.now(), { cache: 'no-store' });
+      const tj = tr.ok ? await tr.json() : null;
+      RAW.tasks = (tj && tj.tasks) || [];
+      I.TASK_META = tj ? { generatedAt: tj.generatedAt, count: RAW.tasks.length, card: tj.card, startDate: tj.startDate } : null;
+    } catch (e) { RAW.tasks = []; I.TASK_META = null; }
     say('Calculating incentives…');
     const { people, MONTHS } = computeAll(RAW);
     if (!people.length) throw new Error('People sheet returned no rows');

@@ -10,7 +10,7 @@ function exportCSV(list, filename) {
     'Emp Id', 'Name', 'Email', 'Team', 'Designation', 'Logic', 'Manager',
     'Period', 'HITs (counted)', '3-week HITs', 'Weighted HITs', 'Target HITs', 'Achievement %',
     'Band', 'Per-HIT %', 'Output %',
-    'Input A (Spend/Live)', 'Input B (Task)', 'Input C (Callback)', 'Input D (Escalations)',
+    'Input A (Spend/Live)', 'Input B (Task)', 'Input C (Callback within SLA)', 'Input D (Escalations)',
     'Input Bands', 'Multiplier', 'Final %',
     'Ad-hoc % (relative)', 'Ad-hoc pp (flat)', 'Ad-hoc Note', 'Final % (with ad-hoc)',
     'PIP Flag', 'PIP Ratio %', 'Data Status', 'Flags',

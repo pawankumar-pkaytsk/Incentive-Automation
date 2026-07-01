@@ -54,7 +54,7 @@
   const INPUTS = [
     { key: 'A', label: 'Spend / Live',        unit: '%',  green: (v) => v > 80, yellow: (v) => v >= 70 && v <= 80, hint: '> 80% Green · 70–80% Yellow · < 70% Red' },
     { key: 'B', label: 'Task Adherence',      unit: '%',  green: (v) => v > 90, yellow: (v) => v >= 70 && v <= 90, hint: '> 90% Green · 70–90% Yellow · < 70% Red' },
-    { key: 'C', label: 'Callback Adherence',  unit: '%',  green: (v) => v > 95, yellow: (v) => v >= 75 && v <= 95, hint: '> 95% Green · 75–95% Yellow · < 75% Red' },
+    { key: 'C', label: 'Callback Adherence within SLA',  unit: '%',  green: (v) => v > 90, yellow: (v) => v >= 75 && v <= 90, hint: '> 90% Green · 75–90% Yellow · < 75% Red' },
     { key: 'D', label: 'WES (Escalations)',   unit: '',   green: (v) => v < 25, yellow: (v) => v >= 25 && v <= 45, hint: '< 25 Green · 25–45 Yellow · > 45 Red', lowerBetter: true },
   ];
   function bandOf(input, v) { return input.green(v) ? 'green' : input.yellow(v) ? 'yellow' : 'red'; }
@@ -175,7 +175,7 @@
         return { pct, done, total, rows };
       };
       task = { ...mkTasks(['internal_seller_escalation_general_request', 'pre-live-call', 'troubleshoot_manual_action'], rawVals.B), band: bands.B };
-      callback = { ...mkTasks(['schedule_call', 'seller_callback_overdue_sub_task', 'seller_callback_primary_task'], rawVals.C), band: bands.C };
+      callback = { ...mkTasks(['schedule_call'], rawVals.C), band: bands.C };
     }
 
     // Output %

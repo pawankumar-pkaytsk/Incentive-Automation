@@ -112,17 +112,28 @@ const Drill = {
   },
   tasks(rec, name, kind) {
     const t = kind === 'callback' ? rec.callback : rec.task; if (!t) return null;
-    const label = kind === 'callback' ? 'Callback adherence' : 'Task adherence';
+    const isCb = kind === 'callback';
+    const label = isCb ? 'Callback adherence within SLA' : 'Task adherence';
+    const formula = isCb
+      ? label + ' = done within SLA (' + t.done + ') ÷ total schedule_call (' + t.total + ') = ' + (t.pct == null ? '—' : t.pct + '%') + '   · within SLA ⇔ tat ≤ sla_in_min'
+      : label + ' = closed/completed (' + t.done + ') ÷ total (' + t.total + ') = ' + (t.pct == null ? '—' : t.pct + '%');
+    const columns = isCb ? [
+      { key: 'date', label: 'Date', w: '0.9fr', num: true },
+      { key: 'subtask', label: 'Subtask', w: '1.5fr' },
+      { key: 'status', label: 'Status', w: '0.9fr' },
+      { key: 'tat', label: 'TAT / SLA (min)', w: '1.1fr', align: 'right', num: true, fmt: (v, r) => (v == null ? '—' : v) + ' / ' + (r && r.sla != null ? r.sla : '—') },
+      { key: 'done', label: 'Within SLA', w: '0.9fr', align: 'right', fmt: (v) => v ? '✓ yes' : '—', color: (v) => v ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' },
+    ] : [
+      { key: 'date', label: 'Date', w: '0.9fr', num: true },
+      { key: 'subtask', label: 'Subtask', w: '2fr' },
+      { key: 'status', label: 'Status', w: '1fr' },
+      { key: 'done', label: 'Counts', w: '0.7fr', align: 'right', fmt: (v) => v ? '✓ done' : '—', color: (v) => v ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' },
+    ];
     return {
       title: label + ' — tasks', subtitle: (name || '') + ' · ' + rec.label + ' window (20th→20th)', icon: 'checks',
-      filename: kind + '_' + rec.key, width: 640,
-      formula: label + ' = closed/completed (' + t.done + ') ÷ total (' + t.total + ') = ' + (t.pct == null ? '—' : t.pct + '%'),
-      columns: [
-        { key: 'date', label: 'Date', w: '0.9fr', num: true },
-        { key: 'subtask', label: 'Subtask', w: '2fr' },
-        { key: 'status', label: 'Status', w: '1fr' },
-        { key: 'done', label: 'Counts', w: '0.7fr', align: 'right', fmt: (v) => v ? '✓ done' : '—', color: (v) => v ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' },
-      ],
+      filename: kind + '_' + rec.key, width: isCb ? 700 : 640,
+      formula: formula,
+      columns: columns,
       rows: t.rows || [],
     };
   },
