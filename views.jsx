@@ -41,6 +41,32 @@ function exportCSV(list, filename) {
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
+/* ---- PNG export (renders a DOM node to an image) ------------------- */
+async function exportPNG(node, filename) {
+  if (!node || !window.html2canvas) { alert('PNG export is still loading — try again in a moment.'); return; }
+  const canvas = await window.html2canvas(node, {
+    scale: Math.min(2, window.devicePixelRatio || 1) * 1.5,
+    backgroundColor: '#ffffff',
+    useCORS: true,
+    logging: false,
+    // Skip anything flagged, and never capture the loading splash.
+    ignoreElements: (el) => el.id === 'boot' || (el.getAttribute && el.getAttribute('data-export-hide') === 'true'),
+    // Freeze entrance animations so the capture is crisp even mid-transition.
+    onclone: (doc) => {
+      const s = doc.createElement('style');
+      s.textContent = '*,*::before,*::after{animation:none !important;transition:none !important;opacity:1 !important;transform:none !important;}';
+      doc.head.appendChild(s);
+    },
+  });
+  await new Promise((resolve) => canvas.toBlob((blob) => {
+    if (!blob) { resolve(); return; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    resolve();
+  }, 'image/png'));
+}
+
 /* ---- Metric tile ---------------------------------------------------- */
 const MetricTile = ({ label, value, sub, icon, accent = 'var(--sd-primary)', missing }) => (
   <div style={{ background: 'var(--sd-white)', border: '1px solid var(--sd-border)', borderRadius: 'var(--sd-radius-lg)', padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -225,4 +251,4 @@ const AdhocEditor = ({ person, onChange, canEdit }) => {
   );
 };
 
-Object.assign(window, { exportCSV, MetricTile, BandPill, InputBands, SellerHits, CoreBandTable, HypercareSchedule, PIPCard, AdhocEditor, BAND_STYLE });
+Object.assign(window, { exportCSV, exportPNG, MetricTile, BandPill, InputBands, SellerHits, CoreBandTable, HypercareSchedule, PIPCard, AdhocEditor, BAND_STYLE });

@@ -2,8 +2,25 @@
    Incentive Automation — roster rows, TeamView, AdminView (+ PIP tab)
    ===================================================================== */
 
+/* ---- Leaderboard medal ---------------------------------------------- */
+const MEDALS = {
+  1: { grad: 'linear-gradient(135deg,#FFE07A 0%,#F5B301 100%)', ring: '#E0A100', label: '1st' },
+  2: { grad: 'linear-gradient(135deg,#E4E9F0 0%,#A9B2C0 100%)', ring: '#95A0AE', label: '2nd' },
+  3: { grad: 'linear-gradient(135deg,#EEC08C 0%,#C77B3B 100%)', ring: '#B06A2E', label: '3rd' },
+};
+const RankBadge = ({ rank, size = 22 }) => {
+  const m = MEDALS[rank];
+  if (!m) return null;
+  return (
+    <span title={`${m.label} — top performer`} aria-label={`Rank ${rank}`}
+      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: 999, background: m.grad, boxShadow: `inset 0 0 0 1px ${m.ring}, 0 1px 2px rgba(20,23,38,0.2)`, flexShrink: 0 }}>
+      <Icon name="medal" size={Math.round(size * 0.62)} strokeWidth={2.1} style={{ color: '#fff' }} />
+    </span>
+  );
+};
+
 /* ---- Roster row ----------------------------------------------------- */
-const RosterRow = ({ person, onOpen, index }) => {
+const RosterRow = ({ person, onOpen, index, rank }) => {
   const I = window.INCENTIVE;
   const [hover, setHover] = React.useState(false);
   const m = I.cur(person);
@@ -14,7 +31,10 @@ const RosterRow = ({ person, onOpen, index }) => {
     <div onClick={() => onOpen(person)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ display: 'grid', gridTemplateColumns: '2.4fr 1.5fr 1fr 1.2fr', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', background: hover ? 'var(--sd-bg-hover)' : 'transparent', borderTop: '1px solid var(--sd-stroke)', transition: 'background 120ms ease', animation: 'fadeUp 380ms ease both', animationDelay: `${Math.min(index * 20, 360)}ms` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-        <Avatar name={person.name} size={36} />
+        <div style={{ position: 'relative', flexShrink: 0, lineHeight: 0 }}>
+          <Avatar name={person.name} size={36} />
+          {rank ? <span style={{ position: 'absolute', bottom: -4, right: -5 }}><RankBadge rank={rank} size={18} /></span> : null}
+        </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ font: '600 14px/1.2 var(--sd-font-sans)', color: 'var(--sd-heading)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{person.name}</span>
@@ -79,6 +99,7 @@ const TeamView = ({ meta, members: memberList, viewer, onBack, onOpenPerson, bac
   };
   const [sort, setSort] = React.useState('final');
   const [q, setQ] = React.useState('');
+  const captureRef = React.useRef(null);
   let members = memberList.slice();
   if (q.trim()) { const s = q.toLowerCase(); members = members.filter((p) => p.name.toLowerCase().includes(s) || p.designation.toLowerCase().includes(s) || p.empId.toLowerCase().includes(s)); }
   members.sort((a, b) => {
@@ -88,9 +109,25 @@ const TeamView = ({ meta, members: memberList, viewer, onBack, onOpenPerson, bac
     return 0;
   });
 
+  // Leaderboard medals: top 3 by the active ranking metric (payout / achievement).
+  // Computed over the full team so search/sort never changes who is a top performer.
+  const rankVal = (p) => {
+    if (p.logic === 'kae') return I.cur(p).amount ?? -Infinity;
+    if (sort === 'achievement') return I.cur(p).achievementPct ?? -Infinity;
+    return I.finalPctWithAdhoc(p) ?? -Infinity;
+  };
+  const rankMap = {};
+  memberList.slice()
+    .filter((p) => rankVal(p) > -Infinity)
+    .sort((a, b) => rankVal(b) - rankVal(a))
+    .slice(0, 3)
+    .forEach((p, i) => { rankMap[p.email] = i + 1; });
+
+  const baseName = `${team.short.replace(/[^a-z0-9]/gi, '-')}-incentives-${I.PERIOD.replace(' ', '-')}`;
+
   return (
-    <div style={{ animation: 'fadeUp 360ms ease both' }}>
-      {onBack ? <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--sd-fg-2)', font: '600 13px/1 var(--sd-font-sans)', padding: 0, marginBottom: 16 }}><Icon name="arrow-left" size={15} /> {backLabel}</button> : null}
+    <div ref={captureRef} style={{ animation: 'fadeUp 360ms ease both' }}>
+      {onBack ? <button data-export-hide="true" onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--sd-fg-2)', font: '600 13px/1 var(--sd-font-sans)', padding: 0, marginBottom: 16 }}><Icon name="arrow-left" size={15} /> {backLabel}</button> : null}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
         <span style={{ width: 52, height: 52, borderRadius: 14, background: team.tint, color: team.accent, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon name={team.icon} size={26} /></span>
@@ -98,7 +135,10 @@ const TeamView = ({ meta, members: memberList, viewer, onBack, onOpenPerson, bac
           <h2 style={{ font: '700 26px/1.1 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>{team.name}</h2>
           <div style={{ font: '400 14px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginTop: 4 }}>{summary.count} members · {I.PERIOD} pay period</div>
         </div>
-        <Button variant="dark" icon="download-simple" onClick={() => exportCSV(memberList, `${team.short.replace(/[^a-z0-9]/gi, '-')}-incentives-${I.PERIOD.replace(' ', '-')}.csv`)}>Export CSV</Button>
+        <div data-export-hide="true" style={{ display: 'flex', gap: 8 }}>
+          <Button variant="outline" icon="download-simple" onClick={() => exportCSV(memberList, `${baseName}.csv`)}>CSV</Button>
+          <Button variant="dark" icon="chart-bar" onClick={() => exportPNG(captureRef.current, `${baseName}.png`)}>PNG</Button>
+        </div>
       </div>
 
       <div style={{ marginBottom: 20 }}><TeamStatBar summary={summary} /></div>
@@ -106,8 +146,8 @@ const TeamView = ({ meta, members: memberList, viewer, onBack, onOpenPerson, bac
       <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', flexWrap: 'wrap' }}>
           <div style={{ font: '700 15px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', flex: 1 }}>Members</div>
-          <div style={{ width: 220 }}><TextInput icon="magnifying-glass" placeholder="Search name or role…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div data-export-hide="true" style={{ width: 220 }}><TextInput icon="magnifying-glass" placeholder="Search name or role…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+          <div data-export-hide="true" style={{ display: 'flex', gap: 6 }}>
             {[['final', 'Final %'], ['achievement', 'Achievement'], ['name', 'Name']].map(([k, l]) => (
               <button key={k} onClick={() => setSort(k)} style={{ background: sort === k ? 'var(--sd-accent-1)' : 'transparent', color: sort === k ? 'var(--sd-primary)' : 'var(--sd-fg-2)', border: `1px solid ${sort === k ? 'var(--sd-accent-2)' : 'var(--sd-lowlight-1)'}`, borderRadius: 999, padding: '6px 12px', font: '600 12px/1 var(--sd-font-sans)', cursor: 'pointer' }}>{l}</button>
             ))}
@@ -115,7 +155,7 @@ const TeamView = ({ meta, members: memberList, viewer, onBack, onOpenPerson, bac
         </div>
         <RosterHeader />
         <div>
-          {members.map((p, i) => <RosterRow key={p.email} person={p} index={i} onOpen={onOpenPerson} />)}
+          {members.map((p, i) => <RosterRow key={p.email} person={p} index={i} rank={rankMap[p.email]} onOpen={onOpenPerson} />)}
           {members.length === 0 ? <div style={{ padding: 32, textAlign: 'center', font: '400 14px var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>No members match “{q}”.</div> : null}
         </div>
       </Card>
