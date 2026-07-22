@@ -184,7 +184,7 @@
       const mkTasks = (subs, pct) => {
         const total = Math.round(between(rng(), 14, 40)), done = Math.round(total * pct / 100);
         const rows = [];
-        for (let i = 0; i < total; i++) rows.push({ date: new Date(raw.year, raw.month - 1, 20 + (i % 22)).toISOString().slice(0, 10), subtask: subs[i % subs.length], status: i < done ? (i % 2 ? 'completed' : 'closed') : 'open', done: i < done });
+        for (let i = 0; i < total; i++) rows.push({ id: 'SAMPLE-' + raw.key + '-' + (i + 1), date: new Date(raw.year, raw.month - 1, 20 + (i % 22)).toISOString().slice(0, 10), subtask: subs[i % subs.length], status: i < done ? (i % 2 ? 'completed' : 'closed') : 'open', done: i < done });
         return { pct, done, total, rows };
       };
       task = { ...mkTasks(['internal_seller_escalation_general_request', 'pre-live-call', 'troubleshoot_manual_action'], rawVals.B), band: bands.B };

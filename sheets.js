@@ -165,11 +165,11 @@
         if (isT) {
           const store = bucket(taskByPM, who.email + '|' + m.key);
           store.total++; if (done) store.done++;
-          store.rows.push({ date: fmtDate(d), subtask: sub, status: stt, done: done });
+          store.rows.push({ id: t.id, date: fmtDate(d), subtask: sub, status: stt, done: done });
         } else {
           const store = bucket(callByPM, who.email + '|' + m.key);
           store.total++; if (withinSla) store.done++;
-          store.rows.push({ date: fmtDate(d), subtask: sub, status: stt, done: withinSla, sla: sla, tat: tat });
+          store.rows.push({ id: t.id, date: fmtDate(d), subtask: sub, status: stt, done: withinSla, sla: sla, tat: tat });
         }
       });
     });

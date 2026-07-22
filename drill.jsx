@@ -118,9 +118,10 @@ const Drill = {
       ? label + ' = done within SLA (' + t.done + ') ÷ total schedule_call (' + t.total + ') = ' + (t.pct == null ? '—' : t.pct + '%') + '   · within SLA ⇔ tat ≤ sla_in_min'
       : label + ' = closed/completed (' + t.done + ') ÷ total (' + t.total + ') = ' + (t.pct == null ? '—' : t.pct + '%');
     const columns = isCb ? [
+      { key: 'id', label: 'Task ID', w: '1.4fr' },
       { key: 'date', label: 'Date', w: '0.9fr', num: true },
-      { key: 'subtask', label: 'Subtask', w: '1.5fr' },
-      { key: 'status', label: 'Status', w: '0.9fr' },
+      { key: 'subtask', label: 'Subtask', w: '1.3fr' },
+      { key: 'status', label: 'Status', w: '0.8fr' },
       { key: 'tat', label: 'TAT / SLA (min)', w: '1.1fr', align: 'right', num: true, fmt: (v, r) => (v == null ? '—' : v) + ' / ' + (r && r.sla != null ? r.sla : '—') },
       { key: 'done', label: 'Within SLA', w: '0.9fr', align: 'right', fmt: (v) => v ? '✓ yes' : '—', color: (v) => v ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' },
     ] : [

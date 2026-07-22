@@ -72,6 +72,7 @@ def main():
         if not cr or cr < START_DATE:
             continue
         out.append({
+            'id': str(r.get('id') or ''),
             's': str(r.get('seller_id') or ''),
             'st': st,
             'gc': str(r.get('assignee_name') or '').strip(),
