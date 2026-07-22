@@ -51,6 +51,13 @@
   function windowFor(month, year) { return { start: new Date(year, month - 1, WINDOW_START_DAY, 0, 0, 0), end: new Date(year, month, WINDOW_START_DAY, 23, 59, 59) }; }
   // Revival cycle is 20th of the month → 19th of the next (e.g. Jun incentive = 20 Jun → 19 Jul).
   function revivalWindowFor(month, year) { return { start: new Date(year, month - 1, WINDOW_START_DAY, 0, 0, 0), end: new Date(year, month, WINDOW_START_DAY - 1, 23, 59, 59) }; }
+  // Callback-within-SLA (Core GCs) cycle: standard 20th → 19th, EXCEPT Jun-2026 which is
+  // measured 2 Jul → 19 Jul only — the policy was announced on 2 Jul 2026 (mid-cycle), so the
+  // pre-announcement days don't count. This override applies to the callback metric alone.
+  function callbackWindowFor(month, year, key) {
+    if (key === '2026-06') return { start: new Date(2026, 6, 2, 0, 0, 0), end: new Date(2026, 6, 19, 23, 59, 59) };
+    return { start: new Date(year, month - 1, WINDOW_START_DAY, 0, 0, 0), end: new Date(year, month, WINDOW_START_DAY - 1, 23, 59, 59) };
+  }
   function inWindow(d, w) { return d && d.getTime() >= w.start.getTime() && d.getTime() <= w.end.getTime(); }
 
   const CORE_BANDS = [{ min: 120, max: Infinity, rate: 6.25, label: '> 120%' }, { min: 90, max: 120, rate: 4.5, label: '90–120%' }, { min: 50, max: 90, rate: 1.5, label: '50–90%' }, { min: 0, max: 50, rate: 0, label: '< 50%' }];
@@ -161,7 +168,10 @@
       const sla = t.sla == null ? null : Number(t.sla), tat = t.tat == null ? null : Number(t.tat);
       const withinSla = done && sla != null && tat != null && tat <= sla;
       MONTHS.forEach((m) => {
-        if (!inWindow(d, windowFor(m.month, m.year))) return;
+        // Task uses the standard 20th→20th window; Callback-within-SLA uses its own cycle
+        // (20th→19th, with the Jun-2026 launch override of 2 Jul→19 Jul).
+        const win = isT ? windowFor(m.month, m.year) : callbackWindowFor(m.month, m.year, m.key);
+        if (!inWindow(d, win)) return;
         if (isT) {
           const store = bucket(taskByPM, who.email + '|' + m.key);
           store.total++; if (done) store.done++;

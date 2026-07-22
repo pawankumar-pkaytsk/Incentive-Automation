@@ -130,8 +130,9 @@ const Drill = {
       { key: 'status', label: 'Status', w: '1fr' },
       { key: 'done', label: 'Counts', w: '0.7fr', align: 'right', fmt: (v) => v ? '✓ done' : '—', color: (v) => v ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' },
     ];
+    const win = !isCb ? ' · window (20th→20th)' : (rec.key === '2026-06' ? ' · 2–19 Jul (SLA launch)' : ' · 20th→19th cycle');
     return {
-      title: label + ' — tasks', subtitle: (name || '') + ' · ' + rec.label + ' window (20th→20th)', icon: 'checks',
+      title: label + ' — tasks', subtitle: (name || '') + ' · ' + rec.label + win, icon: 'checks',
       filename: kind + '_' + rec.key, width: isCb ? 700 : 640,
       formula: formula,
       columns: columns,

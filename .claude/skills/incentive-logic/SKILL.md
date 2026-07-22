@@ -28,7 +28,7 @@ Teams (from designation/team): core, midmarket, goodseller, hypercare, revival, 
 ## Task & Callback (from Metabase card 10181 → task_data.json)
 Bucketed per GC per pay-period window (**20th→20th**, `WINDOW_START_DAY=20`). "Done" = status `completed`/`closed`.
 - **Task Adherence** = done ÷ total, over sub_types: `internal_seller_escalation_general_request`, `pre-live-call`, `troubleshoot_manual_action`.
-- **Callback Adherence within SLA** = (done AND `tat ≤ sla_in_min`) ÷ total, over sub_type `schedule_call` **only**. `tat` and `sla_in_min` are minutes from the query.
+- **Callback Adherence within SLA** = (done AND `tat ≤ sla_in_min`) ÷ total, over sub_type `schedule_call` **only** (Core GCs only). `tat` and `sla_in_min` are minutes from the query. **Window:** `callbackWindowFor` — standard 20th→19th cycle, EXCEPT **Jun 2026 = 2 Jul→19 Jul** (policy launched mid-cycle on 2 Jul 2026; pre-announcement days excluded). Task adherence keeps the plain 20th→20th `windowFor`.
 - Code: `sheets.js` task/callback loop (`taskByPM`/`callByPM`); the callback bucket's `done` holds the *within-SLA* count so `pct = done/total`.
 
 ## WES (Input D)
