@@ -5,7 +5,7 @@ description: Refresh the task/callback data (task_data.json) from Metabase card 
 
 # Refresh task/callback data (Metabase → task_data.json)
 
-Task & Callback input metrics do NOT come from a Google Sheet — they come from **Metabase card 10181** ("All Tasks (Pawan) - for website built"), pulled into `task_data.json` (committed to the repo, read same-origin by the app with no auth). The browser can't hit Metabase directly (public site, password can't be in client JS, CORS, ~184k rows), so a script snapshots it.
+Task & Callback input metrics do NOT come from a Google Sheet — they come from **Metabase card 10181** ("All Tasks (Pawan) - for website built"), pulled into `task_data.json` (committed to the repo, read same-origin by the app with no auth). The browser can't hit Metabase directly (public site, password can't be in client JS, CORS, ~184k rows), so a script snapshots it. **The same script also pulls Metabase card 11911** (Revived Seller Log) into `revival_data.json`, which powers the Revival team's count-based incentive (see the `incentive-logic` skill). Both files are refreshed and committed together.
 
 ## Refresh now (and deploy)
 ```bash

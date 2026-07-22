@@ -46,6 +46,8 @@ const RosterRow = ({ person, onOpen, index, rank }) => {
       <div>
         {person.logic === 'kae' ? (
           <span className="sd-num" style={{ font: '600 13px var(--sd-font-sans)', color: m.strikeCount ? 'var(--sd-red-500)' : 'var(--sd-green-700)' }}>{m.strikeCount} strike{m.strikeCount === 1 ? '' : 's'}</span>
+        ) : person.logic === 'revival' ? (
+          <span className="sd-num" style={{ font: '600 13px var(--sd-font-sans)', color: m.amount > 0 ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' }}>{m.revivalCount} revived{m.amount > 0 ? '' : ' · below 21'}</span>
         ) : src.achievementPct != null ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ flex: 1, maxWidth: 80 }}><ProgressBar pct={Math.min(100, src.achievementPct)} color={src.achievementPct >= 90 ? 'var(--sd-green-700)' : src.achievementPct >= 50 ? team.accent : 'var(--sd-red-500)'} delay={index * 18} /></div>
@@ -53,10 +55,10 @@ const RosterRow = ({ person, onOpen, index, rank }) => {
           </div>
         ) : <span style={{ font: '400 13px var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>—</span>}
       </div>
-      <div className="sd-num" style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.logic === 'kae' ? '—' : src.weightedHits.toFixed(1)}</div>
+      <div className="sd-num" style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.logic === 'kae' || person.logic === 'revival' ? '—' : src.weightedHits.toFixed(1)}</div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        {person.logic === 'kae'
-          ? <span className="sd-num" style={{ font: '700 14px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}>{I.inr(m.amount)}</span>
+        {person.logic === 'kae' || person.logic === 'revival'
+          ? <span className="sd-num" style={{ font: '700 14px/1 var(--sd-font-sans)', color: m.amount > 0 ? 'var(--sd-primary)' : 'var(--sd-fg-3)' }}>{I.inr(m.amount)}</span>
           : isGM
             ? <span className="sd-num" style={{ font: '700 14px/1 var(--sd-font-sans)', color: src.finalPct != null ? 'var(--sd-primary)' : 'var(--sd-red-500)' }}>{src.finalPct != null ? I.pct(src.finalPct, 1) : 'Pending'}</span>
             : <span className="sd-num" style={{ font: '700 14px/1 var(--sd-font-sans)', color: m.finalPct != null ? 'var(--sd-primary)' : 'var(--sd-red-500)' }}>{m.finalPct != null ? I.pct(I.finalPctWithAdhoc(person), 1) : 'Pending'}</span>}
@@ -76,7 +78,12 @@ const RosterHeader = () => (
 /* ---- Team stat bar -------------------------------------------------- */
 const TeamStatBar = ({ summary }) => {
   const I = window.INCENTIVE;
-  const tiles = [
+  const tiles = summary.isRevival ? [
+    { label: 'Members', value: summary.count, icon: 'users', accent: 'var(--sd-primary)' },
+    { label: 'Revivals', value: summary.totalRevivals, icon: 'arrow-u-up-left', accent: summary.accent },
+    { label: 'Qualified (>20)', value: summary.revivalQualified, icon: 'check-circle', accent: 'var(--sd-green-700)' },
+    { label: 'Total payout', value: I.inr(summary.revivalPayout), icon: 'hand-coins', accent: 'var(--sd-primary)' },
+  ] : [
     { label: 'Members', value: summary.count, icon: 'users', accent: 'var(--sd-primary)' },
     { label: 'HITs (weighted)', value: summary.totalHits.toFixed(1), icon: 'target', accent: summary.accent },
     { label: 'Avg achievement', value: summary.avgAchievement + '%', icon: 'gauge', accent: 'var(--sd-green-700)' },
@@ -90,12 +97,17 @@ const TeamView = ({ meta, members: memberList, viewer, onBack, onOpenPerson, bac
   const I = window.INCENTIVE;
   const team = meta;
   const computable = memberList.filter((p) => I.cur(p).achievementPct != null);
+  const isRevival = team.key === 'revival';
   const summary = {
     count: memberList.length,
     totalHits: memberList.reduce((s, p) => s + I.cur(p).weightedHits, 0),
     avgAchievement: computable.length ? Math.round(computable.reduce((s, p) => s + I.cur(p).achievementPct, 0) / computable.length) : 0,
     pip: memberList.filter((p) => p.pip.flagged).length,
     accent: team.accent, members: memberList,
+    isRevival,
+    totalRevivals: isRevival ? memberList.reduce((s, p) => s + (I.cur(p).revivalCount || 0), 0) : 0,
+    revivalPayout: isRevival ? memberList.reduce((s, p) => s + (I.cur(p).amount || 0), 0) : 0,
+    revivalQualified: isRevival ? memberList.filter((p) => (I.cur(p).amount || 0) > 0).length : 0,
   };
   const [sort, setSort] = React.useState('final');
   const [q, setQ] = React.useState('');
@@ -112,7 +124,7 @@ const TeamView = ({ meta, members: memberList, viewer, onBack, onOpenPerson, bac
   // Leaderboard medals: top 3 by the active ranking metric (payout / achievement).
   // Computed over the full team so search/sort never changes who is a top performer.
   const rankVal = (p) => {
-    if (p.logic === 'kae') return I.cur(p).amount ?? -Infinity;
+    if (p.logic === 'kae' || p.logic === 'revival') return I.cur(p).amount ?? -Infinity;
     if (sort === 'achievement') return I.cur(p).achievementPct ?? -Infinity;
     return I.finalPctWithAdhoc(p) ?? -Infinity;
   };

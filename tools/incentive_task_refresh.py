@@ -15,8 +15,10 @@ Env:  REPO_DIR (default ~/Incentive-Automation), START_DATE (default 2026-01-01)
 import json, os, sys, subprocess, urllib.request, datetime
 
 CARD = 10181
+REV_CARD = 11911
 REPO = os.path.expanduser(os.environ.get("REPO_DIR", "~/Incentive-Automation"))
 OUT  = os.path.join(REPO, "task_data.json")
+REV_OUT = os.path.join(REPO, "revival_data.json")
 START_DATE = os.environ.get("START_DATE", "2026-01-01")
 CRED_CACHE = os.path.expanduser("~/metabase-arr-refresh/.mbcreds")
 DESKTOP_CFG = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
@@ -94,9 +96,46 @@ def main():
     print(f"      task rows: {len(task)} ({sum(1 for t in task if done(t))} done)")
     print(f"      callback(schedule_call): {len(call)} · {sum(1 for t in call if done(t))} done · {sum(1 for t in call if within(t))} done within SLA")
 
+    # ---- Revival log (card 11911) -> revival_data.json ----------------
+    # Each row is one revival event. gc = submitted_by, ts = "May 22, 2026, 06:01:23".
+    # The app counts revivals per GC per 20th->19th cycle and applies the band rate.
+    rev_rows = req(f"{url}/api/card/{REV_CARD}/query/json", 'POST', {}, H)
+    print(f"[revival] card {REV_CARD}: {len(rev_rows)} rows")
+    revivals, bad_ts = [], 0
+    for r in rev_rows:
+        gc = str(r.get('submitted_by') or '').strip()
+        if not gc:
+            continue
+        raw_ts = str(r.get('timestamp') or '').strip()
+        try:
+            dt = datetime.datetime.strptime(raw_ts, '%b %d, %Y, %H:%M:%S')
+            cr = dt.strftime('%Y-%m-%d')
+        except ValueError:
+            bad_ts += 1
+            continue
+        if cr < START_DATE:
+            continue
+        revivals.append({
+            'gc': gc,
+            'sid': str(r.get('seller_id') or ''),
+            'seller': str(r.get('seller_name') or '').strip(),
+            'amt': str(r.get('funds_added_amount_in_rupees') or '').strip(),
+            'cr': cr,
+        })
+    rev_data = {
+        'generatedAt': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'startDate': START_DATE,
+        'card': REV_CARD,
+        'revivals': revivals,
+    }
+    json.dump(rev_data, open(REV_OUT, 'w'), separators=(',', ':'))
+    import collections as _c
+    by_gc = _c.Counter(x['gc'] for x in revivals)
+    print(f"[out] {REV_OUT} ({os.path.getsize(REV_OUT)} bytes) · {len(revivals)} revivals · {len(by_gc)} GCs" + (f" · {bad_ts} bad timestamps skipped" if bad_ts else ""))
+
     if '--push' in sys.argv:
-        subprocess.run(['git', '-C', REPO, 'add', 'task_data.json'], check=True)
-        r = subprocess.run(['git', '-C', REPO, 'commit', '-m', 'Refresh task/callback input data (card 10181)'], capture_output=True, text=True)
+        subprocess.run(['git', '-C', REPO, 'add', 'task_data.json', 'revival_data.json'], check=True)
+        r = subprocess.run(['git', '-C', REPO, 'commit', '-m', 'Refresh task/callback + revival input data (cards 10181, 11911)'], capture_output=True, text=True)
         print(r.stdout.strip() or r.stderr.strip())
         if r.returncode == 0:
             subprocess.run(['git', '-C', REPO, 'push', 'origin', 'main'], check=True); print("[push] deployed")

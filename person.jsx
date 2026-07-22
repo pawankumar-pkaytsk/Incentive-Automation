@@ -25,12 +25,12 @@ const PersonHeader = ({ person, viewer }) => {
           <Badge tone="primary" style={{ background: team.tint, color: team.accent }}><Icon name={team.icon} size={13} /> {team.name}</Badge>
           <span style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.designation}</span>
           <span style={{ font: '400 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>· {person.empId}</span>
-          <Badge tone={person.logic === 'hypercare' ? 'info' : 'primary'} dot>{person.logic === 'hypercare' ? 'Hypercare logic' : person.logic === 'kae' ? 'KAE logic' : isGM ? 'GM rollup' : 'Core GC logic'}</Badge>
+          <Badge tone={person.logic === 'hypercare' ? 'info' : 'primary'} dot>{person.logic === 'hypercare' ? 'Hypercare logic' : person.logic === 'kae' ? 'KAE logic' : person.logic === 'revival' ? 'Revival logic' : isGM ? 'GM rollup' : 'Core GC logic'}</Badge>
         </div>
       </div>
       <div style={{ textAlign: 'right', minWidth: 160 }}>
         <div style={{ font: '600 11px/1 var(--sd-font-sans)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--sd-fg-2)', marginBottom: 6 }}>{I.PERIOD} · Final incentive</div>
-        {person.logic === 'kae' ? <div style={{ font: '700 40px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}>{I.inr(m.amount)}</div>
+        {person.logic === 'kae' || person.logic === 'revival' ? <div style={{ font: '700 40px/1 var(--sd-font-sans)', color: m.amount > 0 ? 'var(--sd-primary)' : 'var(--sd-fg-3)' }}>{I.inr(m.amount)}</div>
           : isGM ? (m.gm && m.gm.finalPct != null ? <div style={{ font: '700 40px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}><CountUp value={m.gm.finalPct} format={(v) => I.pct(v, 2)} /></div> : <div style={{ font: '700 22px/1.1 var(--sd-font-sans)', color: 'var(--sd-red-500)' }}>Pending data</div>)
           : (m.finalPct != null ? <div style={{ font: '700 40px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}><CountUp value={finalPctAdj} format={(v) => I.pct(v, 2)} /></div>
             : <div style={{ font: '700 22px/1.1 var(--sd-font-sans)', color: 'var(--sd-red-500)' }}>Pending data</div>)}
@@ -244,6 +244,84 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
               </div>
             </Card>
             
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ---------- Revival GC (count-based ₹, 20th→19th cycle) ---------- */
+  if (person.logic === 'revival') {
+    const band = m.revivalBand || { label: '—', rate: 0 };
+    const rows = m.revivalRows || [];
+    const qualified = m.amount > 0;
+    const revivalPayload = window.Drill.revival ? window.Drill.revival(m, person.name) : null;
+    return (
+      <div style={{ animation: 'fadeUp 360ms ease both' }}>
+        {onBack ? <BackBtn onBack={onBack} /> : null}
+        <PersonHeader person={person} viewer={viewer} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(0,1fr)', gap: 20, alignItems: 'start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '16px 16px 4px' }}><SectionTitle eyebrow="Full transparency · Revival GC" title={`How your ${I.PERIOD} incentive is calculated`} /></div>
+              <div style={{ padding: '0 16px 10px' }}>
+                <MathRow label="Sellers revived (20th→19th)" detail={<DrillNumber payload={revivalPayload} title="See which revivals counted">{m.revivalCount + ' revived'}</DrillNumber>} value={band.label} accent={qualified ? 'var(--sd-green-700)' : 'var(--sd-fg-3)'} />
+                <MathRow label="Per-revival rate" detail={qualified ? band.label + ' band' : 'Below minimum threshold (needs 21+)'} value={qualified ? '₹' + band.rate : '₹0'} indent />
+              </div>
+              <div style={{ padding: '4px 16px 16px' }}>
+                <MathRow strong label={`Final incentive · ${I.PERIOD}`} detail={qualified ? m.revivalCount + ' × ₹' + band.rate + '/revival' : m.revivalCount + ' revivals — below 21, no payout'} value={I.inr(m.amount)} />
+              </div>
+            </Card>
+            <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '14px 16px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="arrow-u-up-left" size={18} style={{ color: qualified ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' }} />
+                <div style={{ font: '700 15px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', flex: 1 }}>Sellers you revived this cycle</div>
+                <span style={{ font: '600 12px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{m.revivalCount} revived</span>
+              </div>
+              {rows.length === 0 ? (
+                <div style={{ padding: '4px 16px 20px', font: '500 13px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>No revivals logged in this cycle.</div>
+              ) : (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '0.5fr 1fr 2.2fr 1fr', gap: 8, padding: '8px 16px', background: 'var(--sd-bg-app)', font: '600 10px/1 var(--sd-font-sans)', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sd-fg-2)' }}>
+                    <span>#</span><span>Date</span><span>Seller</span><span style={{ textAlign: 'right' }}>Funds</span>
+                  </div>
+                  <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                    {rows.map((s, i) => (
+                      <div key={i} style={{ display: 'grid', gridTemplateColumns: '0.5fr 1fr 2.2fr 1fr', gap: 8, padding: '9px 16px', borderTop: '1px solid var(--sd-stroke)', alignItems: 'center' }}>
+                        <span className="sd-num" style={{ font: '700 12px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}>{i + 1}</span>
+                        <span className="sd-num" style={{ font: '500 12px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{s.date}</span>
+                        <span style={{ font: '500 12px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.seller || s.sid}</span>
+                        <span className="sd-num" style={{ textAlign: 'right', font: '500 12px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{s.amt ? '₹' + s.amt : '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <MetricTile label="Revived" value={m.revivalCount} sub="This cycle" icon="arrow-u-up-left" accent="var(--sd-primary)" />
+              <MetricTile label="Band" value={band.label} sub={qualified ? '₹' + band.rate + '/revival' : 'Below threshold'} icon="squares-four" accent={qualified ? 'var(--sd-green-700)' : 'var(--sd-fg-3)'} />
+              <MetricTile label="Rate" value={qualified ? '₹' + band.rate : '₹0'} sub="Per revival" icon="hand-coins" accent="var(--sd-fg-2)" />
+              <MetricTile label="Final" value={I.inr(m.amount)} sub="This cycle" icon="wallet" accent="var(--sd-primary)" />
+            </div>
+            <Card variant="regular" padding={18}>
+              <div style={{ font: '700 14px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', marginBottom: 12 }}>Revival incentive schedule</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {[['≤ 20', '₹0', 'Below threshold', 0, 20], ['21–30', '₹200/rev', 'max ₹6,000', 21, 30], ['31–40', '₹250/rev', 'max ₹10,000', 31, 40], ['40+', '₹375/rev', '₹15,000 & up', 41, Infinity]].map((r) => {
+                  const active = m.revivalCount >= r[3] && m.revivalCount <= r[4];
+                  return (
+                    <div key={r[0]} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 'var(--sd-radius-md)', background: active ? 'var(--sd-accent-1)' : 'transparent', border: active ? '1px solid var(--sd-primary)' : '1px solid var(--sd-stroke)' }}>
+                      <span style={{ flex: '0 0 52px', font: '700 12px/1 var(--sd-font-sans)', color: active ? 'var(--sd-primary)' : 'var(--sd-fg-2)' }}>{r[0]}</span>
+                      <span className="sd-num" style={{ flex: 1, font: '600 13px/1 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>{r[1]}</span>
+                      <span style={{ font: '400 11px/1 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>{r[2]}</span>
+                      {active ? <Icon name="check" size={14} style={{ color: 'var(--sd-primary)' }} /> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
           </div>
         </div>
       </div>

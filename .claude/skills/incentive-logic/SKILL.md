@@ -8,7 +8,7 @@ description: Reference for how HITS incentives are calculated (team logics, achi
 > **Golden rule:** the math lives in BOTH `engine.js` (computes over the seeded sample roster; also defines `I.INPUTS` band labels/thresholds shown in the UI) and `sheets.js` (`computeAll`, over live rows). **Any logic change must be made in both**, or sample and live disagree. If it touches task/callback sub_types or the SLA rule, also update `tools/incentive_task_refresh.py` (see the `refresh-task-data` skill).
 
 ## Team → logic
-Teams (from designation/team): core, midmarket, goodseller, hypercare, revival, campaign, ai, kae, gm → mapped by `logicFor()` to one of: **core**, **hypercare**, **kae** (GM = rollup of GC descendants).
+Teams (from designation/team): core, midmarket, goodseller, hypercare, revival, campaign, ai, kae, gm → mapped by `logicFor()` to one of: **core**, **hypercare**, **kae**, **revival** (GM = rollup of GC descendants).
 
 ## core logic
 `output = perHitRate × weightedHits`, then `finalPct = output × multiplier`.
@@ -39,6 +39,16 @@ Cumulative per-HIT schedule `[7, 8, 9, 11, 15]` then flat `20` per HIT beyond th
 
 ## kae logic
 Flat base ₹6,500, reduced by strike bands (0 → full; more strikes → larger deduction, down to 0). From the `strikes` sheet, matched by Emp ID.
+
+## revival logic (from Metabase card 11911 → revival_data.json)
+Count-based ₹ payout, per revival GC per **20th→19th** cycle (note: NOT 20th→20th; uses `revivalWindowFor`). Count = number of revival-log rows attributed to the GC (`submitted_by`, resolved to roster) in the window. Amount = **whole count × the band's rate** (non-tiered):
+| Revival count | Rate | Max |
+|---|---|---|
+| ≤ 20 | ₹0 | below threshold |
+| 21–30 | ₹200/rev | ₹6,000 |
+| 31–40 | ₹250/rev | ₹10,000 |
+| 40+ (41+) | ₹375/rev | uncapped ("₹15,000 & up") |
+Boundary: 40 → 250 (per literal "31–40" row); >40 → 375. Code: `REVIVAL_BANDS`/`revivalBandOf` + the `revival` branch in `computeAll` (sheets.js) and `computeRevivalMonth` (engine.js). Data source: `tools/incentive_task_refresh.py` also pulls card 11911. `revival` team is not PIP-eligible.
 
 ## Other concepts
 - **weightedHits**: 3-week-go-live sellers count ×1.5; hypercare counts ×1.

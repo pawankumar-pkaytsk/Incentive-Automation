@@ -72,6 +72,17 @@
   function kaeBand(n) { return KAE_BANDS.find((b) => n <= b.max); }
   const STRIKE_ISSUES = ['Late seller response (>24h SLA breach)', 'Missed daily check-in call', 'Catalogue QC rejection', 'Unresolved NDR beyond 48h', 'COD confirmation delay', 'Incorrect GST invoice raised', 'Escalation not actioned', 'Pricing approval missed'];
 
+  /* ---- Revival GC count-based incentive (₹) -------------------------- */
+  // Whole revival count × band rate (non-tiered). ≤20 = below threshold = ₹0.
+  // 31–40 → 250 (max ₹10,000); >40 → 375 (uncapped). Cycle window is 20th→19th.
+  const REVIVAL_BANDS = [
+    { min: 0,  max: 20,       rate: 0,   maxAmount: 0,     label: '≤ 20 (below threshold)' },
+    { min: 21, max: 30,       rate: 200, maxAmount: 6000,  label: '21–30' },
+    { min: 31, max: 40,       rate: 250, maxAmount: 10000, label: '31–40' },
+    { min: 41, max: Infinity, rate: 375, maxAmount: null,  label: '40+' },
+  ];
+  function revivalBand(c) { return REVIVAL_BANDS.find((b) => c >= b.min && c <= b.max) || REVIVAL_BANDS[0]; }
+
   function multiplierFromBands(bands) {
     const g = bands.filter((b) => b === 'green').length;
     const y = bands.filter((b) => b === 'yellow').length;
@@ -88,6 +99,7 @@
   function logicFor(p) {
     if (p.team === 'hypercare') return 'hypercare';
     if (p.team === 'kae') return 'kae';
+    if (p.team === 'revival') return 'revival';
     return 'core';
   }
 
@@ -136,6 +148,7 @@
     let rawVals = null, bands = null, bandArr = null, mx = { mult: 1, gcBand: null, rule: null };
     let spend = null, task = null, callback = null, escalations = null;
     if (logic === 'kae') return computeKaeMonth(p, raw);
+    if (logic === 'revival') return computeRevivalMonth(p, raw);
     if (logic === 'core') {
       const rng = rngFor(p.empId + '|inp|' + raw.key);
       // WES sample: social-media, SOS, internal escalation counts (deduped per seller/day upstream)
@@ -227,6 +240,32 @@
       spend: null, task: null, callback: null, escalations: null,
       // KAE-specific
       strikes, strikeCount: n, kaeBase: KAE_BASE, kaeBand: band, dedPct: band.ded, amount: band.amount,
+      adhocPct: 0, adhocAbs: 0, adhocNote: '',
+      dataHealth: 'ok', missingFields: [],
+    };
+  }
+
+  function computeRevivalMonth(p, raw) {
+    const rng = rngFor(p.empId + '|rev|' + raw.key);
+    const count = Math.floor(between(rng(), 8, 46)); // sample revival count
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      rows.push({
+        date: new Date(raw.year, raw.month - 1, 20 + Math.floor(rng() * 29)).toISOString().slice(0, 10),
+        seller: 'Sample Seller ' + (i + 1), sid: 'S' + (1000 + i), amt: '10000',
+      });
+    }
+    rows.sort((a, b) => a.date < b.date ? -1 : 1);
+    const band = revivalBand(count);
+    const amount = count * band.rate;
+    return {
+      ...raw, logic: 'revival',
+      counted: [], disposed: [], threeWeekCounted: [], weightedHits: 0, rawHits: 0, achievementPct: null,
+      rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null,
+      coreBand: null, perHitRate: null, outputPct: null, finalPct: null,
+      spend: null, task: null, callback: null, escalations: null,
+      // Revival-specific
+      revivalCount: count, revivalRows: rows, revivalBand: band, revivalRate: band.rate, amount: amount,
       adhocPct: 0, adhocAbs: 0, adhocNote: '',
       dataHealth: 'ok', missingFields: [],
     };
@@ -361,7 +400,12 @@
     const isKae = key === 'kae';
     const totalStrikes = isKae ? mem.reduce((s, p) => s + (c(p).strikeCount || 0), 0) : 0;
     const kaePayout = isKae ? mem.reduce((s, p) => s + (c(p).amount || 0), 0) : 0;
-    return { ...I.TEAMS[key], count: mem.length, flagged: flagged.length, missing: missing.length, pip: pipCount, avgFinal: avgFinalPct(mem), avgAchievement, totalHits, isKae, totalStrikes, kaePayout, members: mem };
+    // Revival: count-based ₹ team — surface revival counts & payout instead of %/hits
+    const isRevival = key === 'revival';
+    const totalRevivals = isRevival ? mem.reduce((s, p) => s + (c(p).revivalCount || 0), 0) : 0;
+    const revivalPayout = isRevival ? mem.reduce((s, p) => s + (c(p).amount || 0), 0) : 0;
+    const revivalQualified = isRevival ? mem.filter((p) => (c(p).amount || 0) > 0).length : 0;
+    return { ...I.TEAMS[key], count: mem.length, flagged: flagged.length, missing: missing.length, pip: pipCount, avgFinal: avgFinalPct(mem), avgAchievement, totalHits, isKae, totalStrikes, kaePayout, isRevival, totalRevivals, revivalPayout, revivalQualified, members: mem };
   }
   function allTeamSummaries() { return I.TEAM_ORDER.map(teamSummary); }
   function flaggedPeople() {
@@ -376,6 +420,7 @@
   /* ---- Extend the global API ----------------------------------------- */
   Object.assign(I, {
     CORE_BANDS, coreBand, HYPERCARE_SCHEDULE, hypercareCumulative, INPUTS, bandOf, multiplierFromBands,
+    REVIVAL_BANDS, revivalBand,
     logicFor, cur, finalPctWithAdhoc, setPeriod, monthsBefore, activeKey,
     teamMembers, avgFinalPct, teamSummary, allTeamSummaries, flaggedPeople, pipPeople, evaluatePIP,
     CURKEY,

@@ -13,6 +13,7 @@ function exportCSV(list, filename) {
     'Input A (Spend/Live)', 'Input B (Task)', 'Input C (Callback within SLA)', 'Input D (Escalations)',
     'Input Bands', 'Multiplier', 'Final %',
     'Ad-hoc % (relative)', 'Ad-hoc pp (flat)', 'Ad-hoc Note', 'Final % (with ad-hoc)',
+    'Revival Count', 'Revival Band', 'Revival Rate (₹)', 'Incentive Amount (₹)',
     'PIP Flag', 'PIP Ratio %', 'Data Status', 'Flags',
   ];
   const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
@@ -30,6 +31,8 @@ function exportCSV(list, filename) {
       c.finalPct == null ? '' : c.finalPct.toFixed(2),
       c.adhocPct || 0, c.adhocAbs || 0, c.adhocNote || '',
       fp == null ? '' : fp.toFixed(2),
+      p.logic === 'revival' ? c.revivalCount : '', p.logic === 'revival' && c.revivalBand ? c.revivalBand.label : '', p.logic === 'revival' ? c.revivalRate : '',
+      (p.logic === 'revival' || p.logic === 'kae') ? c.amount : '',
       p.pip.flagged ? 'YES' : 'NO', p.pip.ratio == null ? '' : p.pip.ratio.toFixed(1),
       c.dataHealth, (c.missingFields || []).join('; '),
     ].map(esc).join(',');

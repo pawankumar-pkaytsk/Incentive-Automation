@@ -49,6 +49,8 @@
   function fmtDate(d) { return d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') : ''; }
   function monthNum(v) { if (typeof v === 'number') return v; const s = String(v).trim(); if (/^\d+$/.test(s)) return +s; const i = MN.findIndex((n) => s.toLowerCase().startsWith(n.toLowerCase())); return i >= 0 ? i + 1 : NaN; }
   function windowFor(month, year) { return { start: new Date(year, month - 1, WINDOW_START_DAY, 0, 0, 0), end: new Date(year, month, WINDOW_START_DAY, 23, 59, 59) }; }
+  // Revival cycle is 20th of the month → 19th of the next (e.g. Jun incentive = 20 Jun → 19 Jul).
+  function revivalWindowFor(month, year) { return { start: new Date(year, month - 1, WINDOW_START_DAY, 0, 0, 0), end: new Date(year, month, WINDOW_START_DAY - 1, 23, 59, 59) }; }
   function inWindow(d, w) { return d && d.getTime() >= w.start.getTime() && d.getTime() <= w.end.getTime(); }
 
   const CORE_BANDS = [{ min: 120, max: Infinity, rate: 6.25, label: '> 120%' }, { min: 90, max: 120, rate: 4.5, label: '90–120%' }, { min: 50, max: 90, rate: 1.5, label: '50–90%' }, { min: 0, max: 50, rate: 0, label: '< 50%' }];
@@ -63,6 +65,15 @@
   const KAE_BASE = 6000;
   const KAE_BANDS = [{ max: 0, amount: 6000, ded: 0, label: '0 strikes' }, { max: 3, amount: 4800, ded: 20, label: '1–3 strikes' }, { max: 5, amount: 3000, ded: 50, label: '>3–5 strikes' }, { max: Infinity, amount: 0, ded: 100, label: '>5 strikes' }];
   const kaeBandOf = (n) => KAE_BANDS.find((b) => n <= b.max);
+  // Revival GC: whole revival count × the band's per-revival rate (non-tiered). ≤20 = below threshold = ₹0.
+  // Boundary: 31–40 uses 250 (max ₹10,000); >40 uses 375 (uncapped). Cycle window is 20th→19th.
+  const REVIVAL_BANDS = [
+    { min: 0,  max: 20,       rate: 0,   maxAmount: 0,     label: '≤ 20 (below threshold)' },
+    { min: 21, max: 30,       rate: 200, maxAmount: 6000,  label: '21–30' },
+    { min: 31, max: 40,       rate: 250, maxAmount: 10000, label: '31–40' },
+    { min: 41, max: Infinity, rate: 375, maxAmount: null,  label: '40+' },
+  ];
+  const revivalBandOf = (c) => REVIVAL_BANDS.find((b) => c >= b.min && c <= b.max) || REVIVAL_BANDS[0];
   const ADMINS = (I.ADMINS || []).map((e) => e.toLowerCase());
 
   function classify(p) {
@@ -78,7 +89,7 @@
     if (t === 'Hits') return 'core';
     return 'gm';
   }
-  function logicFor(team) { return team === 'hypercare' ? 'hypercare' : team === 'kae' ? 'kae' : 'core'; }
+  function logicFor(team) { return team === 'hypercare' ? 'hypercare' : team === 'kae' ? 'kae' : team === 'revival' ? 'revival' : 'core'; }
 
   /* ---- Fuzzy name resolver (Nikita S → Nikita Sinha, etc.) ----------- */
   const norm = (s) => String(s == null ? '' : s).replace(/[\u00a0\u200b\u200c\u200d]/g, ' ').toLowerCase().replace(/[._]/g, ' ').replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -158,6 +169,9 @@
     // KAE strikes (by Emp ID)
     const strikesByPM = {}; row('strikes').forEach((r) => { const c = SHEETS.strikes.col; const d = toDate(r[c.date]); if (!d) return; const who = byEmpId[String(r[c.kaeEmpId] || '').trim()] || resolve(r[c.kaeName]); if (!who) return; MONTHS.forEach((m) => { if (!inWindow(d, windowFor(m.month, m.year))) return; (strikesByPM[who.empId + '|' + m.key] || (strikesByPM[who.empId + '|' + m.key] = [])).push({ date: fmtDate(d), issue: String(r[c.issue] || '').trim() }); }); });
 
+    // Revival log (card 11911 → revival_data.json): count revivals per revival-GC per 20th→19th cycle.
+    const revivalByPM = {}; row('revivals').forEach((rv) => { const who = resolve(rv.gc); if (!who) return; const d = toDate(rv.cr); if (!d) return; MONTHS.forEach((m) => { if (!inWindow(d, revivalWindowFor(m.month, m.year))) return; const k = who.email + '|' + m.key; const store = revivalByPM[k] || (revivalByPM[k] = { count: 0, rows: [] }); store.count++; store.rows.push({ date: fmtDate(d), seller: rv.seller, sid: rv.sid, amt: rv.amt }); }); });
+
     // blank month records + handover attribution
     people.forEach((p) => MONTHS.forEach((m) => p.byMonth[m.key] = { key: m.key, label: m.label, month: m.month, year: m.year, counted: [], disposed: [] }));
     const gmHits = {}; // gmEmail|monthKey -> [{sellerId, sellerName, threeWeek}] (col F = GM)
@@ -170,6 +184,13 @@
         const ks = (strikesByPM[p.empId + '|' + m.key] || []).slice().sort((a, b) => a.date < b.date ? -1 : 1);
         const n = ks.length, kb = kaeBandOf(n);
         Object.assign(rec, { threeWeekCounted: [], weightedHits: 0, rawHits: 0, target: 0, achievementPct: null, rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null, coreBand: null, perHitRate: null, outputPct: null, finalPct: null, spend: null, task: null, callback: null, escalations: null, strikes: ks, strikeCount: n, kaeBase: KAE_BASE, kaeBand: kb, dedPct: kb.ded, amount: kb.amount, adhocPct: 0, adhocAbs: 0, adhocNote: '', dataHealth: 'ok', missingFields: [] });
+        return;
+      }
+      if (p.logic === 'revival') {
+        const rv = revivalByPM[p.email + '|' + m.key] || { count: 0, rows: [] };
+        const rb = revivalBandOf(rv.count);
+        const amount = rv.count * rb.rate;
+        Object.assign(rec, { threeWeekCounted: [], weightedHits: 0, rawHits: 0, target: 0, achievementPct: null, rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null, coreBand: null, perHitRate: null, outputPct: null, finalPct: null, spend: null, task: null, callback: null, escalations: null, revivalCount: rv.count, revivalRows: rv.rows.slice().sort((a, b) => a.date < b.date ? -1 : 1), revivalBand: rb, revivalRate: rb.rate, amount: amount, adhocPct: 0, adhocAbs: 0, adhocNote: '', dataHealth: 'ok', missingFields: [] });
         return;
       }
       const c3 = rec.counted.filter((s) => s.threeWeek);
@@ -354,6 +375,13 @@
       RAW.tasks = (tj && tj.tasks) || [];
       I.TASK_META = tj ? { generatedAt: tj.generatedAt, count: RAW.tasks.length, card: tj.card, startDate: tj.startDate } : null;
     } catch (e) { RAW.tasks = []; I.TASK_META = null; }
+    // Revival log (card 11911) — same-origin snapshot, no auth.
+    try {
+      const rr = await fetch('revival_data.json?_=' + Date.now(), { cache: 'no-store' });
+      const rj = rr.ok ? await rr.json() : null;
+      RAW.revivals = (rj && rj.revivals) || [];
+      I.REVIVAL_META = rj ? { generatedAt: rj.generatedAt, count: RAW.revivals.length, card: rj.card, startDate: rj.startDate } : null;
+    } catch (e) { RAW.revivals = []; I.REVIVAL_META = null; }
     say('Calculating incentives…');
     const { people, MONTHS } = computeAll(RAW);
     if (!people.length) throw new Error('People sheet returned no rows');

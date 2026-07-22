@@ -152,6 +152,23 @@ const Drill = {
       rows: e.rows || [],
     };
   },
+  revival(rec, name) {
+    const rows = rec.revivalRows || [];
+    const band = rec.revivalBand || { label: '—', rate: 0 };
+    const qualified = rec.amount > 0;
+    return {
+      title: 'Revivals — ' + rec.label, subtitle: (name || '') + ' · ' + rec.label + ' cycle (20th→19th)', icon: 'arrow-u-up-left',
+      filename: 'revivals_' + rec.key, width: 660,
+      formula: rec.revivalCount + ' revived → ' + band.label + (qualified ? ' → ' + rec.revivalCount + ' × ₹' + band.rate + ' = ₹' + Number(rec.amount).toLocaleString('en-IN') : ' → below threshold (needs 21+), ₹0'),
+      columns: [
+        { key: 'n', label: '#', w: '0.4fr', num: true },
+        { key: 'date', label: 'Date', w: '1fr', num: true },
+        { key: 'seller', label: 'Seller', w: '2.4fr' },
+        { key: 'amt', label: 'Funds added', w: '1fr', align: 'right', num: true, fmt: (v) => v ? '₹' + v : '—' },
+      ],
+      rows: rows.map((s, i) => ({ n: i + 1, date: s.date, seller: s.seller || s.sid, amt: s.amt })),
+    };
+  },
 };
 
 Object.assign(window, { DrillNumber, DrillModal, DrillHost, Drill });

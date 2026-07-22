@@ -75,7 +75,7 @@ See the **`troubleshoot-login`** skill for the full decision tree. Quick version
 **8 Google Sheets** (read live per-user via OAuth), configured in `SHEETS` in `sheets.js`. Each = `{ id, tab, col }` where `col` maps field → 0-based column index; header row dropped:
 `hitsmaster` (seller HITs) · `people` (roster) · `target` (monthly targets) · `handover` (seller→GC/GM attribution) · `threeweek` (3-week go-live IDs) · `spend` (daily spend/live) · `sos` (escalations → WES) · `strikes` (KAE strikes).
 
-**Task + Callback are NOT a Google Sheet** — they come from **Metabase card 10181** ("All Tasks (Pawan) - for website built") as the committed `task_data.json` snapshot (see §6). This is because the browser can't read Metabase directly (public static site, password can't live in client JS, CORS, 184k rows).
+**Task + Callback are NOT a Google Sheet** — they come from **Metabase card 10181** ("All Tasks (Pawan) - for website built") as the committed `task_data.json` snapshot (see §6). **Revival team** data comes from **Metabase card 11911** (Revived Seller Log) as `revival_data.json`, refreshed by the same job. This is because the browser can't read Metabase directly (public static site, password can't live in client JS, CORS, 184k rows).
 
 - **Attribution window:** the 20th of month M to the 20th of M+1 (`WINDOW_START_DAY = 20`).
 - **DATA_SOURCES** in `data.js` is just the human-readable list shown in the app's "Data sources" panel.
@@ -108,6 +108,7 @@ Full detail lives in the **`incentive-logic`** skill. In brief — teams map to 
   - **Input band thresholds:** Spend `>80/≥70`; Task `>90/≥70`; **Callback within SLA `>90/≥75`**; WES `<25/≤45` (lower is better).
 - **hypercare** — cumulative per-HIT schedule `[7,8,9,11,15]` then flat 20; no multiplier.
 - **kae** — flat base ₹6,500 (₹6,000 in some copy), reduced by strike bands.
+- **revival** — count-based ₹ (card 11911), per **20th→19th** cycle: ≤20→₹0 · 21–30→₹200/rev · 31–40→₹250/rev · 40+→₹375/rev (whole count × band rate). See the `incentive-logic` skill.
 
 **Callback Adherence within SLA** (changed most recently): `schedule_call` tasks only; a task counts as done-within-SLA if `status ∈ {completed, closed}` AND `tat ≤ sla_in_min`. `% = done-within-SLA ÷ total schedule_call`. Task Adherence is unchanged (`closed/completed ÷ total` over its 3 sub_types).
 
