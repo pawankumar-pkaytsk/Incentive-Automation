@@ -120,9 +120,13 @@
     const byEmpId = {}; people.forEach((p) => { if (p.empId) byEmpId[p.empId] = p; });
     people.forEach((p) => { if (p.managerEmail && byEmail[p.managerEmail]) byEmail[p.managerEmail].reports.push(p); });
     const roleOf = (p) => ADMINS.includes(p.email) ? 'admin' : (p.reports.length ? 'manager' : 'gc');
-    people.forEach((p) => { p.team = classify(p); p.logic = logicFor(p.team); p.role = roleOf(p); });
-    const descendants = (p, acc, seen) => { acc = acc || []; seen = seen || {}; p.reports.forEach((r) => { if (seen[r.email]) return; seen[r.email] = true; acc.push(r); descendants(r, acc, seen); }); return acc; };
     const resolve = buildResolver(people);
+    // Anyone who submitted a revival (card 11911) IS a Revival GC — force that team,
+    // overriding the roster's classification so they never appear under any other team.
+    const revivalGCs = {};
+    row('revivals').forEach((rv) => { const who = resolve(rv.gc); if (who) revivalGCs[who.email] = true; });
+    people.forEach((p) => { p.team = revivalGCs[p.email] ? 'revival' : classify(p); p.logic = logicFor(p.team); p.role = roleOf(p); });
+    const descendants = (p, acc, seen) => { acc = acc || []; seen = seen || {}; p.reports.forEach((r) => { if (seen[r.email]) return; seen[r.email] = true; acc.push(r); descendants(r, acc, seen); }); return acc; };
 
     // 3-week + hits master + targets
     const threeWeek = {}; row('threeweek').forEach((r) => { const id = String(r[SHEETS.threeweek.col.sellerId]).trim(); if (id) threeWeek[id] = true; });

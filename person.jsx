@@ -10,7 +10,7 @@ const BackBtn = ({ onBack }) => (
 
 const PersonHeader = ({ person, viewer }) => {
   const I = window.INCENTIVE; const m = I.cur(person); const team = I.TEAMS[person.team];
-  const isGM = person.role !== 'gc'; const isSelf = viewer.email === person.email;
+  const isGM = person.role !== 'gc' && person.logic !== 'kae' && person.logic !== 'revival'; const isSelf = viewer.email === person.email;
   const finalPctAdj = I.finalPctWithAdhoc(person);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
@@ -62,7 +62,7 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
   const I = window.INCENTIVE;
   const m = I.cur(person);
   const team = I.TEAMS[person.team];
-  const isGM = person.role !== 'gc';
+  const isGM = person.role !== 'gc' && person.logic !== 'kae' && person.logic !== 'revival';
   const canEdit = viewer.role === 'admin' || (viewer.role === 'manager' && I.descendants(viewer).some((d) => d.email === person.email));
   const finalPctAdj = I.finalPctWithAdhoc(person);
   const apPct = Number(m.adhocPct) || 0, apAbs = Number(m.adhocAbs) || 0;
