@@ -121,10 +121,19 @@
     people.forEach((p) => { if (p.managerEmail && byEmail[p.managerEmail]) byEmail[p.managerEmail].reports.push(p); });
     const roleOf = (p) => ADMINS.includes(p.email) ? 'admin' : (p.reports.length ? 'manager' : 'gc');
     const resolve = buildResolver(people);
-    // Anyone who submitted a revival (card 11911) IS a Revival GC — force that team,
-    // overriding the roster's classification so they never appear under any other team.
-    const revivalGCs = {};
-    row('revivals').forEach((rv) => { const who = resolve(rv.gc); if (who) revivalGCs[who.email] = true; });
+    // Revival GCs are DEFINED by card 11911 — every submitter is a Revival GC. Resolve each
+    // to the roster (forcing them onto the revival team so they never appear elsewhere); and
+    // SYNTHESIZE a person for any submitter missing from the People sheet, so every revival GC
+    // still shows up. revivalPersonByName maps a submitter name → the person it counts toward.
+    const rvNorm = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const revivalGCs = {}, revivalPersonByName = {}, subSeen = {};
+    row('revivals').forEach((rv) => {
+      const nm = String(rv.gc || '').trim(); if (!nm) return;
+      const k = rvNorm(nm); if (subSeen[k]) { return; } subSeen[k] = true;
+      let who = resolve(nm);
+      if (!who) { who = { empId: '', name: nm, email: 'revival|' + k, managerEmail: '', teamRaw: 'Revenue', designation: 'Revival GC', byMonth: {}, reports: [], synthetic: true }; people.push(who); byEmail[who.email] = who; }
+      revivalGCs[who.email] = true; revivalPersonByName[k] = who;
+    });
     people.forEach((p) => { p.team = revivalGCs[p.email] ? 'revival' : classify(p); p.logic = logicFor(p.team); p.role = roleOf(p); });
     const descendants = (p, acc, seen) => { acc = acc || []; seen = seen || {}; p.reports.forEach((r) => { if (seen[r.email]) return; seen[r.email] = true; acc.push(r); descendants(r, acc, seen); }); return acc; };
 
@@ -174,7 +183,7 @@
     const strikesByPM = {}; row('strikes').forEach((r) => { const c = SHEETS.strikes.col; const d = toDate(r[c.date]); if (!d) return; const who = byEmpId[String(r[c.kaeEmpId] || '').trim()] || resolve(r[c.kaeName]); if (!who) return; MONTHS.forEach((m) => { if (!inWindow(d, windowFor(m.month, m.year))) return; (strikesByPM[who.empId + '|' + m.key] || (strikesByPM[who.empId + '|' + m.key] = [])).push({ date: fmtDate(d), issue: String(r[c.issue] || '').trim() }); }); });
 
     // Revival log (card 11911 → revival_data.json): count revivals per revival-GC per 20th→19th cycle.
-    const revivalByPM = {}; row('revivals').forEach((rv) => { const who = resolve(rv.gc); if (!who) return; const d = toDate(rv.cr); if (!d) return; MONTHS.forEach((m) => { if (!inWindow(d, revivalWindowFor(m.month, m.year))) return; const k = who.email + '|' + m.key; const store = revivalByPM[k] || (revivalByPM[k] = { count: 0, rows: [] }); store.count++; store.rows.push({ date: fmtDate(d), seller: rv.seller, sid: rv.sid, amt: rv.amt }); }); });
+    const revivalByPM = {}; row('revivals').forEach((rv) => { const who = revivalPersonByName[rvNorm(rv.gc)]; if (!who) return; const d = toDate(rv.cr); if (!d) return; MONTHS.forEach((m) => { if (!inWindow(d, revivalWindowFor(m.month, m.year))) return; const k = who.email + '|' + m.key; const store = revivalByPM[k] || (revivalByPM[k] = { count: 0, rows: [] }); store.count++; store.rows.push({ date: fmtDate(d), seller: rv.seller, sid: rv.sid, amt: rv.amt }); }); });
 
     // blank month records + handover attribution
     people.forEach((p) => MONTHS.forEach((m) => p.byMonth[m.key] = { key: m.key, label: m.label, month: m.month, year: m.year, counted: [], disposed: [] }));
