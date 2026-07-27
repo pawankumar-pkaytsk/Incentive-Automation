@@ -262,8 +262,16 @@
       if (y > 0) return { mult: 1.20, rule: 'GC Yellow, none Red', g, y, r };
       return { mult: 1.50, rule: 'All GCs Green', g, y, r };
     };
+    // GM → core-GC mapping from card 12101 (gm_mapping.json). This defines which GCs roll up
+    // to each GM for the ops multiplier — overriding the roster's manager hierarchy. GMs not in
+    // the mapping keep the old hierarchy (descendants). Resolve by email first, then name.
+    const resolvePerson = (email, name) => byEmail[String(email || '').trim().toLowerCase()] || resolve(name);
+    const gmGCs = {};
+    row('gmmap').forEach((mp) => { const gmP = resolvePerson(mp.gmEmail, mp.gm), gcP = resolvePerson(mp.gcEmail, mp.gc); if (!gmP || !gcP) return; (gmGCs[gmP.email] || (gmGCs[gmP.email] = [])).push(gcP); });
+    // Anyone listed as a GM in the mapping is treated as a GM (rendered as a rollup).
+    Object.keys(gmGCs).forEach((email) => { const p = byEmail[email]; if (p && p.role === 'gc') p.role = 'manager'; });
     people.filter((p) => p.role !== 'gc').forEach((gm) => {
-      const gcs = descendants(gm).filter((d) => d.role === 'gc');
+      const gcs = gmGCs[gm.email] || descendants(gm).filter((d) => d.role === 'gc');
       const is1k5k = gcs.some((d) => d.team === 'midmarket');
       MONTHS.forEach((m) => {
         const hits = gmHits[gm.email + '|' + m.key] || [];
@@ -405,6 +413,13 @@
       RAW.revivals = (rj && rj.revivals) || [];
       I.REVIVAL_META = rj ? { generatedAt: rj.generatedAt, count: RAW.revivals.length, card: rj.card, startDate: rj.startDate } : null;
     } catch (e) { RAW.revivals = []; I.REVIVAL_META = null; }
+    // GM → core-GC mapping (card 12101) — drives the GM ops multiplier.
+    try {
+      const gr = await fetch('gm_mapping.json?_=' + Date.now(), { cache: 'no-store' });
+      const gj = gr.ok ? await gr.json() : null;
+      RAW.gmmap = (gj && gj.mappings) || [];
+      I.GMMAP_META = gj ? { generatedAt: gj.generatedAt, count: RAW.gmmap.length, card: gj.card } : null;
+    } catch (e) { RAW.gmmap = []; I.GMMAP_META = null; }
     say('Calculating incentives…');
     const { people, MONTHS } = computeAll(RAW);
     if (!people.length) throw new Error('People sheet returned no rows');

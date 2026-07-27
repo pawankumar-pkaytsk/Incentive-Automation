@@ -16,9 +16,11 @@ import json, os, sys, subprocess, urllib.request, datetime
 
 CARD = 10181
 REV_CARD = 11911
+GM_CARD = 12101
 REPO = os.path.expanduser(os.environ.get("REPO_DIR", "~/Incentive-Automation"))
 OUT  = os.path.join(REPO, "task_data.json")
 REV_OUT = os.path.join(REPO, "revival_data.json")
+GM_OUT = os.path.join(REPO, "gm_mapping.json")
 START_DATE = os.environ.get("START_DATE", "2026-01-01")
 CRED_CACHE = os.path.expanduser("~/metabase-arr-refresh/.mbcreds")
 DESKTOP_CFG = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
@@ -134,9 +136,26 @@ def main():
     by_gc = _c.Counter(x['gc'] for x in revivals)
     print(f"[out] {REV_OUT} ({os.path.getsize(REV_OUT)} bytes) · {len(revivals)} revivals · {len(by_gc)} GCs" + (f" · {bad_ts} bad timestamps skipped" if bad_ts else ""))
 
+    # ---- GM → core-GC mapping (card 12101) -> gm_mapping.json ----------
+    # One row per (GM, core GC). Drives the GM incentive's GC-ops multiplier + team size.
+    gm_rows = req(f"{url}/api/card/{GM_CARD}/query/json", 'POST', {}, H)
+    mappings = []
+    for r in gm_rows:
+        gm = str(r.get('gm') or '').strip(); gc = str(r.get('core_gc') or '').strip()
+        if not gm or not gc:
+            continue
+        mappings.append({
+            'gm': gm, 'gmEmail': str(r.get('gm_email_id') or '').strip().lower(),
+            'gc': gc, 'gcEmail': str(r.get('core_gc_email_id') or '').strip().lower(),
+        })
+    gm_data = {'generatedAt': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'), 'card': GM_CARD, 'mappings': mappings}
+    json.dump(gm_data, open(GM_OUT, 'w'), separators=(',', ':'))
+    gmset = {m['gmEmail'] or m['gm'] for m in mappings}
+    print(f"[out] {GM_OUT} ({os.path.getsize(GM_OUT)} bytes) · {len(mappings)} GM→GC rows · {len(gmset)} GMs")
+
     if '--push' in sys.argv:
-        subprocess.run(['git', '-C', REPO, 'add', 'task_data.json', 'revival_data.json'], check=True)
-        r = subprocess.run(['git', '-C', REPO, 'commit', '-m', 'Refresh task/callback + revival input data (cards 10181, 11911)'], capture_output=True, text=True)
+        subprocess.run(['git', '-C', REPO, 'add', 'task_data.json', 'revival_data.json', 'gm_mapping.json'], check=True)
+        r = subprocess.run(['git', '-C', REPO, 'commit', '-m', 'Refresh task/callback + revival + GM-mapping data (cards 10181, 11911, 12101)'], capture_output=True, text=True)
         print(r.stdout.strip() or r.stderr.strip())
         if r.returncode == 0:
             subprocess.run(['git', '-C', REPO, 'push', 'origin', 'main'], check=True); print("[push] deployed")

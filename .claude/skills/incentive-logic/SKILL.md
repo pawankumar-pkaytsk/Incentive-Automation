@@ -52,7 +52,7 @@ Boundary: 40 → 250 (per literal "31–40" row); >40 → 375. Code: `REVIVAL_BA
 
 ## Other concepts
 - **weightedHits**: 3-week-go-live sellers count ×1.5; hypercare counts ×1.
-- **GM rollup**: sum of GC descendants; GM output = (HITs ÷ target) × 25%, then a GC-ops multiplier across reporting GCs.
+- **GM rollup**: GM HITs from handover col F; output = (HITs ÷ target) × 25%, then a GC-ops multiplier across the GM's **reporting core GCs**. That GM→core-GC mapping comes from **Metabase card 12101** → `gm_mapping.json` (`gmGCs` in computeAll, resolved by email then name), overriding the roster's manager hierarchy; GMs absent from the mapping fall back to the roster `descendants`.
 - **PIP flag**: last 2 months; threshold GC 50%, GM 70%; KAE n/a.
 - **adhoc adjustments**: relative % and flat pp overrides per person (see AdhocEditor).
 - **dataHealth**: ok / attention / missing, with `missingFields`.
