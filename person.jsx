@@ -25,7 +25,7 @@ const PersonHeader = ({ person, viewer }) => {
           <Badge tone="primary" style={{ background: team.tint, color: team.accent }}><Icon name={team.icon} size={13} /> {team.name}</Badge>
           <span style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.designation}</span>
           <span style={{ font: '400 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>· {person.empId}</span>
-          <Badge tone={person.logic === 'hypercare' ? 'info' : 'primary'} dot>{person.logic === 'hypercare' ? 'Hypercare logic' : person.logic === 'kae' ? 'KAE logic' : person.logic === 'revival' ? 'Revival logic' : isGM ? 'GM rollup' : 'Core GC logic'}</Badge>
+          <Badge tone={person.logic === 'hypercare' ? 'info' : 'primary'} dot>{person.logic === 'hypercare' ? 'Hypercare logic' : person.logic === 'kae' ? 'KAE logic' : person.logic === 'revival' ? 'Revival logic' : person.logic === 'campaign' ? 'Campaign logic' : isGM ? 'GM rollup' : 'Core GC logic'}</Badge>
         </div>
       </div>
       <div style={{ textAlign: 'right', minWidth: 160 }}>
@@ -322,6 +322,49 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
                 })}
               </div>
             </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ---------- Campaign GC (linear inverse incentive on Spend/GMV) ---------- */
+  if (person.logic === 'campaign') {
+    const sg = m.campaignSpendGmv, base = m.campaignBaseline || 42, inc = m.finalPct, has = sg != null;
+    return (
+      <div style={{ animation: 'fadeUp 360ms ease both' }}>
+        {onBack ? <BackBtn onBack={onBack} /> : null}
+        <PersonHeader person={person} viewer={viewer} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(0,1fr)', gap: 20, alignItems: 'start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '16px 16px 4px' }}><SectionTitle eyebrow="Full transparency · Campaign GC" title={`How your ${I.PERIOD} incentive is calculated`} /></div>
+              {has ? (
+                <div style={{ padding: '0 16px 10px' }}>
+                  <MathRow label="Spend / GMV (week 0)" detail="Lower is better — the incentive moves inversely" value={sg + '%'} accent={sg <= base ? 'var(--sd-green-700)' : 'var(--sd-fg-1)'} />
+                  <MathRow label="Baseline (target)" detail="At the baseline, incentive = 25%" value={base + '%'} indent />
+                </div>
+              ) : (
+                <div style={{ padding: '4px 16px 16px', font: '500 13px/1.5 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>Campaign Spend/GMV is hard-coded for Jun 2026 only — other periods populate once the rolling query is connected.</div>
+              )}
+              {has ? (
+                <div style={{ padding: '4px 16px 16px' }}>
+                  <MathRow strong label={`Final incentive · ${I.PERIOD}`} detail={`25% × (${base}% ÷ ${sg}%)`} value={inc == null ? '—' : I.pct(inc, 2)} />
+                </div>
+              ) : null}
+            </Card>
+            <Card variant="regular" padding={18}>
+              <div style={{ font: '700 14px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', marginBottom: 10 }}>Linear inverse incentive</div>
+              <div style={{ font: '400 13px/1.6 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>Incentive % = 25% × ({base}% ÷ Spend/GMV %). At {base}% → 25%; below {base}% → higher; above {base}% → lower.</div>
+            </Card>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <MetricTile label="Spend / GMV" value={has ? sg + '%' : '—'} sub="Week 0" icon="wallet" accent={has && sg <= base ? 'var(--sd-green-700)' : 'var(--sd-fg-2)'} />
+              <MetricTile label="Baseline" value={base + '%'} sub="= 25% incentive" icon="target" accent="var(--sd-fg-2)" />
+              <MetricTile label="Incentive" value={inc == null ? '—' : I.pct(inc, 2)} sub="This period" icon="percent" accent="var(--sd-primary)" />
+              <MetricTile label="Multiplier" value={has ? '×' + (base / sg).toFixed(3) : '—'} sub={`${base} ÷ Spend/GMV`} icon="chart-line-up" accent="var(--sd-fg-2)" />
+            </div>
           </div>
         </div>
       </div>

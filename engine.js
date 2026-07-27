@@ -100,6 +100,7 @@
     if (p.team === 'hypercare') return 'hypercare';
     if (p.team === 'kae') return 'kae';
     if (p.team === 'revival') return 'revival';
+    if (p.team === 'campaign') return 'campaign';
     return 'core';
   }
 
@@ -149,6 +150,7 @@
     let spend = null, task = null, callback = null, escalations = null;
     if (logic === 'kae') return computeKaeMonth(p, raw);
     if (logic === 'revival') return computeRevivalMonth(p, raw);
+    if (logic === 'campaign') return computeCampaignMonth(p, raw);
     if (logic === 'core') {
       const rng = rngFor(p.empId + '|inp|' + raw.key);
       // WES sample: social-media, SOS, internal escalation counts (deduped per seller/day upstream)
@@ -266,6 +268,23 @@
       spend: null, task: null, callback: null, escalations: null,
       // Revival-specific
       revivalCount: count, revivalRows: rows, revivalBand: band, revivalRate: band.rate, amount: amount,
+      adhocPct: 0, adhocAbs: 0, adhocNote: '',
+      dataHealth: 'ok', missingFields: [],
+    };
+  }
+
+  function computeCampaignMonth(p, raw) {
+    const rng = rngFor(p.empId + '|camp|' + raw.key);
+    const sg = +between(rng(), 38, 55).toFixed(2);   // sample Spend/GMV %
+    const inc = 42 / sg * 25;                          // linear inverse: 25% × (42 ÷ Spend/GMV)
+    return {
+      ...raw, logic: 'campaign',
+      counted: [], disposed: [], threeWeekCounted: [], weightedHits: 0, rawHits: 0, achievementPct: null,
+      rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null,
+      coreBand: null, perHitRate: null, outputPct: null, finalPct: inc,
+      spend: null, task: null, callback: null, escalations: null,
+      // Campaign-specific
+      campaignSpendGmv: sg, campaignBaseline: 42,
       adhocPct: 0, adhocAbs: 0, adhocNote: '',
       dataHealth: 'ok', missingFields: [],
     };

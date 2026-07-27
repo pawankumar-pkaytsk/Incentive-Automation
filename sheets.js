@@ -81,6 +81,18 @@
     { min: 41, max: Infinity, rate: 375, maxAmount: null,  label: '40+' },
   ];
   const revivalBandOf = (c) => REVIVAL_BANDS.find((b) => c >= b.min && c <= b.max) || REVIVAL_BANDS[0];
+  // Campaign GCs — linear inverse incentive: Incentive% = 25% × (baseline ÷ Spend/GMV%).
+  // Baseline 42% → 25%; below 42% → >25%; above 42% → <25%. HARD-CODED for Jun-2026 (week-0
+  // Spend/GMV per GC); Jul onward will come from a rolling Metabase query + POC mapping.
+  const CAMPAIGN_BASELINE = 42, CAMPAIGN_KEY = '2026-06';
+  const CAMPAIGN_W0 = [
+    { name: 'Raj Rajak', spendGmv: 44.65 },
+    { name: 'Shaik Rabbani', spendGmv: 47.00 },
+    { name: 'Sneha Sharma', spendGmv: 40.63 },
+    { name: 'Soumen Das', spendGmv: 51.25 },
+  ];
+  const campNorm = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const campaignIncentive = (sg) => (sg != null && sg > 0) ? (CAMPAIGN_BASELINE / sg) * 25 : null;
   const ADMINS = (I.ADMINS || []).map((e) => e.toLowerCase());
 
   function classify(p) {
@@ -96,7 +108,7 @@
     if (t === 'revenue' || d.includes('escalation')) return 'revival';
     return 'core';   // default HITS team (GM is assigned only from card 12101)
   }
-  function logicFor(team) { return team === 'hypercare' ? 'hypercare' : team === 'kae' ? 'kae' : team === 'revival' ? 'revival' : 'core'; }
+  function logicFor(team) { return team === 'hypercare' ? 'hypercare' : team === 'kae' ? 'kae' : team === 'revival' ? 'revival' : team === 'campaign' ? 'campaign' : 'core'; }
 
   /* ---- Fuzzy name resolver (Nikita S → Nikita Sinha, etc.) ----------- */
   const norm = (s) => String(s == null ? '' : s).replace(/[\u00a0\u200b\u200c\u200d]/g, ' ').toLowerCase().replace(/[._]/g, ' ').replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -146,8 +158,17 @@
     const resolvePerson = (email, name) => byEmail[String(email || '').trim().toLowerCase()] || resolve(name);
     const gmGCs = {}, gmSet = {};
     row('gmmap').forEach((mp) => { const gmP = resolvePerson(mp.gmEmail, mp.gm), gcP = resolvePerson(mp.gcEmail, mp.gc); if (gmP) gmSet[gmP.email] = true; if (!gmP || !gcP) return; (gmGCs[gmP.email] || (gmGCs[gmP.email] = [])).push(gcP); });
+    // Campaign GCs — hard-coded for June (Jul+ will come from a rolling query). Force onto the
+    // campaign team; synthesize any missing from the roster so all listed GCs show.
+    const campaignByEmail = {}, campaignSet = {};
+    CAMPAIGN_W0.forEach((e) => {
+      const k = campNorm(e.name);
+      let who = resolve(e.name);
+      if (!who) { who = { empId: '', name: e.name, email: 'campaign|' + k, managerEmail: '', teamRaw: 'Campaign', designation: 'Campaign GC', byMonth: {}, reports: [], synthetic: true }; people.push(who); byEmail[who.email] = who; }
+      campaignSet[who.email] = true; campaignByEmail[who.email] = e;
+    });
     people.forEach((p) => {
-      p.team = gmSet[p.email] ? 'gm' : (revivalGCs[p.email] ? 'revival' : classify(p));
+      p.team = gmSet[p.email] ? 'gm' : (revivalGCs[p.email] ? 'revival' : (campaignSet[p.email] ? 'campaign' : classify(p)));
       p.logic = logicFor(p.team);
       p.role = ADMINS.includes(p.email) ? 'admin' : ((gmSet[p.email] || p.reports.length) ? 'manager' : 'gc');
     });
@@ -223,6 +244,14 @@
         const rb = revivalBandOf(rv.count);
         const amount = rv.count * rb.rate;
         Object.assign(rec, { threeWeekCounted: [], weightedHits: 0, rawHits: 0, target: 0, achievementPct: null, rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null, coreBand: null, perHitRate: null, outputPct: null, finalPct: null, spend: null, task: null, callback: null, escalations: null, revivalCount: rv.count, revivalRows: rv.rows.slice().sort((a, b) => a.date < b.date ? -1 : 1), revivalBand: rb, revivalRate: rb.rate, amount: amount, adhocPct: 0, adhocAbs: 0, adhocNote: '', dataHealth: 'ok', missingFields: [] });
+        return;
+      }
+      if (p.logic === 'campaign') {
+        // Hard-coded for Jun-2026 only; other periods pending the rolling query.
+        const entry = m.key === CAMPAIGN_KEY ? campaignByEmail[p.email] : null;
+        const sg = entry ? entry.spendGmv : null;
+        const inc = campaignIncentive(sg);
+        Object.assign(rec, { threeWeekCounted: [], weightedHits: 0, rawHits: 0, target: 0, achievementPct: null, rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null, coreBand: null, perHitRate: null, outputPct: null, finalPct: inc, spend: null, task: null, callback: null, escalations: null, campaignSpendGmv: sg, campaignBaseline: CAMPAIGN_BASELINE, adhocPct: 0, adhocAbs: 0, adhocNote: '', dataHealth: sg == null ? 'missing' : 'ok', missingFields: sg == null ? ['Campaign Spend/GMV not set for ' + m.label + ' (hard-coded for Jun 2026 only)'] : [] });
         return;
       }
       const c3 = rec.counted.filter((s) => s.threeWeek);

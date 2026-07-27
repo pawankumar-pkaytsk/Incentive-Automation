@@ -34,6 +34,9 @@ Bucketed per GC per pay-period window (**20th→20th**, `WINDOW_START_DAY=20`). 
 ## WES (Input D)
 `WES = social×3 + sos×1.5 + internal×1`, de-duped by seller/day/type. From the `sos` sheet.
 
+## campaign logic
+Linear **inverse** incentive on Spend/GMV: `Incentive% = 25% × (baseline ÷ Spend/GMV%)`, baseline = 42%. At 42% → 25%; below → higher; above → lower. Lower Spend/GMV is better. Code: `CAMPAIGN_BASELINE`/`CAMPAIGN_W0`/`campaignIncentive` + the `campaign` branch in `computeAll` (sheets.js) and `computeCampaignMonth` (engine.js). **HARD-CODED** for Jun-2026 (`CAMPAIGN_KEY='2026-06'`, week-0 Spend/GMV per GC in `CAMPAIGN_W0`); the 4 GCs are force-synthesized onto the campaign team. **TODO Jul onward:** replace `CAMPAIGN_W0` with a rolling Metabase query + POC mapping (snapshot it in `incentive_task_refresh.py` like the others). Result is stored as `finalPct` (a %). Other periods show pending until the query is wired.
+
 ## hypercare logic
 Cumulative per-HIT schedule `[7, 8, 9, 11, 15]` then flat `20` per HIT beyond the 5th. No multiplier.
 

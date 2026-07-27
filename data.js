@@ -279,6 +279,7 @@ WM1389,Sandhya Narwade,sandhya.narwade@blitzscale.co,ankit.yadav@blitzscale.co,H
       { name: 'Task & Callback (within SLA)', fileId: 'Metabase card 10181 → task_data.json', tab: 'card 10181', desc: 'All Tasks (Pawan). Task = closed/completed ÷ total. Callback within SLA = schedule_call done & tat ≤ sla_in_min ÷ total. Snapshot refreshed by incentive_task_refresh.py' },
       { name: 'Revival log', fileId: 'Metabase card 11911 → revival_data.json', tab: 'card 11911', desc: 'Revived Seller Log (Slack). Count per GC (submitted_by) per 20th→19th cycle → banded ₹ incentive. Snapshot refreshed by incentive_task_refresh.py' },
       { name: 'GM → core-GC mapping', fileId: 'Metabase card 12101 → gm_mapping.json', tab: 'card 12101', desc: 'HITS team mapping (rolling). Defines which core GCs roll up to each GM → drives the GM ops multiplier. Snapshot refreshed by incentive_task_refresh.py' },
+      { name: 'Campaign Spend/GMV', fileId: 'Hard-coded in sheets.js (CAMPAIGN_W0)', tab: 'Jun 2026 only', desc: 'Linear inverse: Incentive% = 25% × (42% ÷ Spend/GMV%). Week-0 values hard-coded for Jun 2026; Jul onward = rolling query + POC mapping (TODO)' },
       { name: 'SOS / Escalations (WES)', fileId: '1SIww2UQnmcVs6lgLGYMxGLcxdCVf3MYkPZk7BfY3hIU', tab: 'sos', desc: 'Type (A) · seller (B) · date (C) · GC (E) → Input D' },
       { name: 'KAE Strikes log', fileId: '16JUSC2vOsG6SvN1-RhnFWZ5fdIrF1SyAYo_EiGbckkE', tab: 'Strikes_Log', desc: 'Date (B) · KAE (C) · Emp ID (D) · issue (G)' },
     ],

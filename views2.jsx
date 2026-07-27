@@ -48,6 +48,8 @@ const RosterRow = ({ person, onOpen, index, rank }) => {
           <span className="sd-num" style={{ font: '600 13px var(--sd-font-sans)', color: m.strikeCount ? 'var(--sd-red-500)' : 'var(--sd-green-700)' }}>{m.strikeCount} strike{m.strikeCount === 1 ? '' : 's'}</span>
         ) : person.logic === 'revival' ? (
           <span className="sd-num" style={{ font: '600 13px var(--sd-font-sans)', color: m.amount > 0 ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' }}>{m.revivalCount} revived{m.amount > 0 ? '' : ' · below 21'}</span>
+        ) : person.logic === 'campaign' ? (
+          <span className="sd-num" style={{ font: '600 13px var(--sd-font-sans)', color: m.campaignSpendGmv == null ? 'var(--sd-fg-3)' : m.campaignSpendGmv <= 42 ? 'var(--sd-green-700)' : 'var(--sd-fg-1)' }}>{m.campaignSpendGmv == null ? '—' : m.campaignSpendGmv + '% S/G'}</span>
         ) : src.achievementPct != null ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ flex: 1, maxWidth: 80 }}><ProgressBar pct={Math.min(100, src.achievementPct)} color={src.achievementPct >= 90 ? 'var(--sd-green-700)' : src.achievementPct >= 50 ? team.accent : 'var(--sd-red-500)'} delay={index * 18} /></div>
@@ -55,7 +57,7 @@ const RosterRow = ({ person, onOpen, index, rank }) => {
           </div>
         ) : <span style={{ font: '400 13px var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>—</span>}
       </div>
-      <div className="sd-num" style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.logic === 'kae' || person.logic === 'revival' ? '—' : src.weightedHits.toFixed(1)}</div>
+      <div className="sd-num" style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.logic === 'kae' || person.logic === 'revival' || person.logic === 'campaign' ? '—' : src.weightedHits.toFixed(1)}</div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         {person.logic === 'kae' || person.logic === 'revival'
           ? <span className="sd-num" style={{ font: '700 14px/1 var(--sd-font-sans)', color: m.amount > 0 ? 'var(--sd-primary)' : 'var(--sd-fg-3)' }}>{I.inr(m.amount)}</span>
@@ -83,6 +85,11 @@ const TeamStatBar = ({ summary }) => {
     { label: 'Revivals', value: summary.totalRevivals, icon: 'arrow-u-up-left', accent: summary.accent },
     { label: 'Qualified (>20)', value: summary.revivalQualified, icon: 'check-circle', accent: 'var(--sd-green-700)' },
     { label: 'Total payout', value: I.inr(summary.revivalPayout), icon: 'hand-coins', accent: 'var(--sd-primary)' },
+  ] : summary.isCampaign ? [
+    { label: 'Members', value: summary.count, icon: 'users', accent: 'var(--sd-primary)' },
+    { label: 'With data', value: summary.campWithData, icon: 'check-circle', accent: 'var(--sd-green-700)' },
+    { label: 'Avg Spend/GMV', value: summary.avgSpendGmv == null ? '—' : summary.avgSpendGmv + '%', icon: 'wallet', accent: summary.accent },
+    { label: 'Avg incentive', value: summary.avgIncentive == null ? '—' : summary.avgIncentive + '%', icon: 'percent', accent: 'var(--sd-primary)' },
   ] : [
     { label: 'Members', value: summary.count, icon: 'users', accent: 'var(--sd-primary)' },
     { label: 'HITs (weighted)', value: summary.totalHits.toFixed(1), icon: 'target', accent: summary.accent },
@@ -98,6 +105,9 @@ const TeamView = ({ meta, members: memberList, viewer, onBack, onOpenPerson, bac
   const team = meta;
   const computable = memberList.filter((p) => I.cur(p).achievementPct != null);
   const isRevival = team.key === 'revival';
+  const isCampaign = team.key === 'campaign';
+  const campSg = isCampaign ? memberList.map((p) => I.cur(p).campaignSpendGmv).filter((v) => v != null) : [];
+  const campInc = isCampaign ? memberList.map((p) => I.cur(p).finalPct).filter((v) => v != null) : [];
   const summary = {
     count: memberList.length,
     totalHits: memberList.reduce((s, p) => s + I.cur(p).weightedHits, 0),
@@ -108,6 +118,10 @@ const TeamView = ({ meta, members: memberList, viewer, onBack, onOpenPerson, bac
     totalRevivals: isRevival ? memberList.reduce((s, p) => s + (I.cur(p).revivalCount || 0), 0) : 0,
     revivalPayout: isRevival ? memberList.reduce((s, p) => s + (I.cur(p).amount || 0), 0) : 0,
     revivalQualified: isRevival ? memberList.filter((p) => (I.cur(p).amount || 0) > 0).length : 0,
+    isCampaign,
+    campWithData: campSg.length,
+    avgSpendGmv: campSg.length ? +(campSg.reduce((s, v) => s + v, 0) / campSg.length).toFixed(1) : null,
+    avgIncentive: campInc.length ? +(campInc.reduce((s, v) => s + v, 0) / campInc.length).toFixed(1) : null,
   };
   const [sort, setSort] = React.useState('final');
   const [q, setQ] = React.useState('');
