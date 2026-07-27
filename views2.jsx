@@ -25,7 +25,7 @@ const RosterRow = ({ person, onOpen, index, rank }) => {
   const [hover, setHover] = React.useState(false);
   const m = I.cur(person);
   const team = I.TEAMS[person.team];
-  const isGM = person.role !== 'gc' && person.logic !== 'kae' && person.logic !== 'revival';
+  const isGM = person.team === 'gm';
   const src = isGM ? (m.gm || { achievementPct: null, weightedHits: 0, finalPct: null }) : m;
   return (
     <div onClick={() => onOpen(person)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}

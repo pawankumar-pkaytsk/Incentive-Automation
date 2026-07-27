@@ -84,17 +84,17 @@
   const ADMINS = (I.ADMINS || []).map((e) => e.toLowerCase());
 
   function classify(p) {
-    const d = (p.designation || '').toLowerCase(), t = p.teamRaw;
+    const d = (p.designation || '').toLowerCase(), t = (p.teamRaw || '').trim().toLowerCase();
+    // NOTE: GM membership is NOT derived here — it comes STRICTLY from Metabase card 12101.
+    // classify() never returns 'gm'; a person is a GM only if card 12101 lists them as one.
     if (d.includes('key account')) return 'kae';
     if (d.includes('ai ')) return 'ai';
     if (d.includes('campaign')) return 'campaign';
-    if (d.includes('growth manager') || d.includes('category lead') || d.includes('business manager') || d.includes('assistant manager')) return 'gm';
-    if (t === '1k-5k') return 'midmarket';
-    if (t === 'Good Seller') return 'goodseller';
-    if (t === 'Hyper Care') return 'hypercare';
-    if (t === 'Revenue' || d.includes('escalation')) return 'revival';
-    if (t === 'Hits') return 'core';
-    return 'gm';
+    if (t === '1k-5k' || t === '1k5k' || t.includes('mid market') || t.includes('midmarket')) return 'midmarket';
+    if (t.includes('good seller')) return 'goodseller';
+    if (t.includes('hyper care') || t.includes('hypercare')) return 'hypercare';
+    if (t === 'revenue' || d.includes('escalation')) return 'revival';
+    return 'core';   // default HITS team (GM is assigned only from card 12101)
   }
   function logicFor(team) { return team === 'hypercare' ? 'hypercare' : team === 'kae' ? 'kae' : team === 'revival' ? 'revival' : 'core'; }
 
@@ -126,7 +126,6 @@
     const byEmail = {}; people.forEach((p) => byEmail[p.email] = p);
     const byEmpId = {}; people.forEach((p) => { if (p.empId) byEmpId[p.empId] = p; });
     people.forEach((p) => { if (p.managerEmail && byEmail[p.managerEmail]) byEmail[p.managerEmail].reports.push(p); });
-    const roleOf = (p) => ADMINS.includes(p.email) ? 'admin' : (p.reports.length ? 'manager' : 'gc');
     const resolve = buildResolver(people);
     // Revival GCs are DEFINED by card 11911 — every submitter is a Revival GC. Resolve each
     // to the roster (forcing them onto the revival team so they never appear elsewhere); and
@@ -141,7 +140,17 @@
       if (!who) { who = { empId: '', name: nm, email: 'revival|' + k, managerEmail: '', teamRaw: 'Revenue', designation: 'Revival GC', byMonth: {}, reports: [], synthetic: true }; people.push(who); byEmail[who.email] = who; }
       revivalGCs[who.email] = true; revivalPersonByName[k] = who;
     });
-    people.forEach((p) => { p.team = revivalGCs[p.email] ? 'revival' : classify(p); p.logic = logicFor(p.team); p.role = roleOf(p); });
+    // GM membership + GM→core-GC mapping come STRICTLY from Metabase card 12101 (gm_mapping.json).
+    // A person is a GM only if the card lists them as one (resolved by email, then name). This
+    // overrides roster designations — nobody becomes a GM by title or by classify() default.
+    const resolvePerson = (email, name) => byEmail[String(email || '').trim().toLowerCase()] || resolve(name);
+    const gmGCs = {}, gmSet = {};
+    row('gmmap').forEach((mp) => { const gmP = resolvePerson(mp.gmEmail, mp.gm), gcP = resolvePerson(mp.gcEmail, mp.gc); if (gmP) gmSet[gmP.email] = true; if (!gmP || !gcP) return; (gmGCs[gmP.email] || (gmGCs[gmP.email] = [])).push(gcP); });
+    people.forEach((p) => {
+      p.team = gmSet[p.email] ? 'gm' : (revivalGCs[p.email] ? 'revival' : classify(p));
+      p.logic = logicFor(p.team);
+      p.role = ADMINS.includes(p.email) ? 'admin' : ((gmSet[p.email] || p.reports.length) ? 'manager' : 'gc');
+    });
     const descendants = (p, acc, seen) => { acc = acc || []; seen = seen || {}; p.reports.forEach((r) => { if (seen[r.email]) return; seen[r.email] = true; acc.push(r); descendants(r, acc, seen); }); return acc; };
 
     // 3-week + hits master + targets
@@ -262,16 +271,10 @@
       if (y > 0) return { mult: 1.20, rule: 'GC Yellow, none Red', g, y, r };
       return { mult: 1.50, rule: 'All GCs Green', g, y, r };
     };
-    // GM → core-GC mapping from card 12101 (gm_mapping.json). This defines which GCs roll up
-    // to each GM for the ops multiplier — overriding the roster's manager hierarchy. GMs not in
-    // the mapping keep the old hierarchy (descendants). Resolve by email first, then name.
-    const resolvePerson = (email, name) => byEmail[String(email || '').trim().toLowerCase()] || resolve(name);
-    const gmGCs = {};
-    row('gmmap').forEach((mp) => { const gmP = resolvePerson(mp.gmEmail, mp.gm), gcP = resolvePerson(mp.gcEmail, mp.gc); if (!gmP || !gcP) return; (gmGCs[gmP.email] || (gmGCs[gmP.email] = [])).push(gcP); });
-    // Anyone listed as a GM in the mapping is treated as a GM (rendered as a rollup).
-    Object.keys(gmGCs).forEach((email) => { const p = byEmail[email]; if (p && p.role === 'gc') p.role = 'manager'; });
-    people.filter((p) => p.role !== 'gc').forEach((gm) => {
-      const gcs = gmGCs[gm.email] || descendants(gm).filter((d) => d.role === 'gc');
+    // GMs are exactly the people classified 'gm' above (strictly from card 12101). Their reporting
+    // core GCs (for the ops multiplier) come from the same card mapping (gmGCs, built earlier).
+    people.filter((p) => p.team === 'gm').forEach((gm) => {
+      const gcs = gmGCs[gm.email] || [];
       const is1k5k = gcs.some((d) => d.team === 'midmarket');
       MONTHS.forEach((m) => {
         const hits = gmHits[gm.email + '|' + m.key] || [];
