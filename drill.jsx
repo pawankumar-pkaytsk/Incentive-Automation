@@ -154,6 +154,101 @@ const Drill = {
       rows: e.rows || [],
     };
   },
+  /* ---- HITS 1k-5k drill-downs ------------------------------------- */
+  mmArr(rec, name) {
+    const det = (rec.mmDet || []).filter((d) => d.t != null);
+    const cyc = rec.mmCycle ? rec.mmCycle[0] + ' → ' + rec.mmCycle[1] : rec.label;
+    const inr = (v) => v == null ? '—' : '₹' + Math.round(v).toLocaleString('en-IN');
+    return {
+      title: 'ARR — target vs achieved', subtitle: (name || '') + ' · ' + rec.label + ' · ' + cyc, icon: 'chart-line-up',
+      filename: 'mm_arr_' + rec.key, width: 780,
+      formula: 'ARR target is EARNED: each seller carries a per-age target (M0 ₹1,859 · M1 ₹3,668 · M2 ₹4,133 · M3 ₹4,480 · M4 ₹4,748 · M5+ ₹4,647, capped at M5). '
+        + inr(rec.mmArrAch) + ' ÷ ' + inr(rec.mmArrTarget) + ' = ' + (rec.mmArrPct == null ? '—' : rec.mmArrPct.toFixed(1) + '%') + '  ·  ≥85% to qualify · ×' + rec.mmArrMult,
+      columns: [
+        { key: 'n', label: 'Seller', w: '2.2fr' },
+        { key: 'age', label: 'Age', w: '0.6fr', align: 'right', num: true, fmt: (v) => v == null ? '—' : 'M' + Math.min(v, 5) },
+        { key: 't', label: 'Target', w: '1fr', align: 'right', num: true, fmt: inr },
+        { key: 'a', label: 'Achieved', w: '1fr', align: 'right', num: true, fmt: inr },
+        { key: 'pct', label: '%', w: '0.8fr', align: 'right', num: true, fmt: (v, r) => r.t ? Math.round(r.a / r.t * 100) + '%' : '—', color: (v, r) => (r.t && r.a / r.t >= 1) ? 'var(--sd-green-700)' : 'var(--sd-fg-1)' },
+        { key: 'f', label: 'Frozen', w: '0.7fr', align: 'right', fmt: (v) => v ? '✓ HIT2' : '—', color: (v) => v ? 'var(--sd-primary)' : 'var(--sd-fg-3)' },
+      ],
+      rows: det,
+    };
+  },
+  mmChurn(rec, name) {
+    const rows = rec.mmChurnDet || [];
+    const cyc = rec.mmCycle ? rec.mmCycle[0] + ' → ' + rec.mmCycle[1] : rec.label;
+    return {
+      title: 'Churn — sellers lost this cycle', subtitle: (name || '') + ' · ' + rec.label + ' · ' + cyc, icon: 'trend-down',
+      filename: 'mm_churn_' + rec.key, width: 720,
+      formula: 'A churn is an EVENT inside the cycle: seller spent ≥ ₹11,800 and then went > 21 days with no spend, where day 22 falls inside ' + cyc
+        + '.  ' + rows.length + ' churn' + (rows.length === 1 ? '' : 's') + ' → ×' + rec.mmChurnMult + ' (0→1× · 1→0.5× · 2+→0)',
+      columns: [
+        { key: 'n', label: 'Seller', w: '2.2fr' },
+        { key: 'last', label: 'Last spend', w: '1fr', num: true },
+        { key: 'cross', label: 'Idle >21d on', w: '1fr', num: true },
+        { key: 'spend', label: 'Total spend', w: '1fr', align: 'right', num: true, fmt: (v) => v == null ? '—' : '₹' + Math.round(v).toLocaleString('en-IN') },
+      ],
+      rows: rows,
+    };
+  },
+  mmSL(rec, name, channel) {
+    const isMeta = channel === 'meta';
+    const det = (rec.mmDet || []).filter((d) => isMeta ? true : d.live);
+    const cyc = rec.mmCycle ? rec.mmCycle[0] + ' → ' + rec.mmCycle[1] : rec.label;
+    const days = rec.mmDays || 0;
+    const denom = isMeta ? rec.mmAssigned : rec.mmGlive;
+    const pct = isMeta ? rec.mmMetaSL : rec.mmGoogleSL;
+    const sum = det.reduce((s, d) => s + (isMeta ? d.md : d.gd), 0);
+    return {
+      title: 'Spend / Live — ' + (isMeta ? 'Meta' : 'Google'), subtitle: (name || '') + ' · ' + rec.label + ' · ' + cyc, icon: 'wallet',
+      filename: 'mm_sl_' + channel + '_' + rec.key, width: 720,
+      formula: 'Day-wise weighted: Σ(seller-days with ' + (isMeta ? 'Meta' : 'Google') + ' spend > 0) ÷ (settled days × ' + (isMeta ? 'assigned' : 'Google-live') + ' sellers) = '
+        + sum + ' ÷ (' + days + ' × ' + (denom || 0) + ') = ' + (pct == null ? '—' : pct.toFixed(1) + '%')
+        + '  ·  ' + (isMeta ? '<60→0 · 60–80→1× · >80→1.25×' : '<65→0 · 65–75→1× · >75→1.2×'),
+      columns: [
+        { key: 'n', label: 'Seller', w: '2.4fr' },
+        { key: isMeta ? 'md' : 'gd', label: 'Days with spend', w: '1.2fr', align: 'right', num: true },
+        { key: 'of', label: 'of settled days', w: '1.2fr', align: 'right', num: true, fmt: () => days },
+        { key: 'p', label: 'Coverage', w: '1fr', align: 'right', num: true,
+          fmt: (v, r) => days ? Math.round((isMeta ? r.md : r.gd) / days * 100) + '%' : '—',
+          color: (v, r) => days && ((isMeta ? r.md : r.gd) / days) >= 0.8 ? 'var(--sd-green-700)' : 'var(--sd-fg-1)' },
+      ],
+      rows: det,
+    };
+  },
+  mmGolive(rec, name) {
+    const rows = rec.mmGoliveDet || [];
+    return {
+      title: 'Google go-lives', subtitle: (name || '') + ' · ' + rec.label + ' · frozen at cycle end', icon: 'seal-check',
+      filename: 'mm_golive_' + rec.key, width: 740,
+      formula: 'Google-live = has a Google ad account AND lifetime Google spend > ₹1 (frozen at the 19th). '
+        + (rec.mmGlive || 0) + ' live ÷ ' + (rec.mmAssigned || 0) + ' assigned = ' + (rec.mmGolive == null ? '—' : rec.mmGolive.toFixed(1) + '%')
+        + '  ·  <50→0 (gate) · 50–65→1× · >65→1.25×',
+      columns: [
+        { key: 'n', label: 'Seller', w: '2.4fr' },
+        { key: 'acct', label: 'Ad account', w: '1fr', align: 'right', fmt: (v) => v ? '✓' : '—', color: (v) => v ? 'var(--sd-green-700)' : 'var(--sd-red-500)' },
+        { key: 'gspend', label: 'Google spend', w: '1.2fr', align: 'right', num: true, fmt: (v) => v == null ? '—' : '₹' + Math.round(v).toLocaleString('en-IN') },
+        { key: 'live', label: 'Google-live', w: '1fr', align: 'right', fmt: (v) => v ? '✓ live' : '—', color: (v) => v ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' },
+      ],
+      rows: rows,
+    };
+  },
+  mmHit2(rec, name) {
+    return {
+      title: 'HIT2 conversions', subtitle: (name || '') + ' · ' + rec.label + ' (calendar month)', icon: 'target',
+      filename: 'mm_hit2_' + rec.key, width: 620,
+      formula: 'HIT2 conversions from hit_master_data for ' + rec.label + ', credited to the GL named in the HITS-2 handover sheet. '
+        + rec.mmHits + ' ÷ target ' + (rec.mmTarget == null ? '—' : rec.mmTarget) + ' = ' + (rec.achievementPct == null ? '—' : Math.round(rec.achievementPct) + '%')
+        + ' → pool ' + (rec.mmBand ? rec.mmBand.pct : 0) + '%',
+      columns: [
+        { key: 'i', label: '#', w: '0.4fr', num: true, fmt: (v, r, i) => undefined },
+        { key: 'seller', label: 'Seller', w: '2.6fr' },
+        { key: 'sid', label: 'Seller ID', w: '1.6fr' },
+      ],
+      rows: (rec.mmRows || []).map((r, i) => ({ i: i + 1, seller: r.seller, sid: r.sid })),
+    };
+  },
   revival(rec, name) {
     const rows = rec.revivalRows || [];
     const band = rec.revivalBand || { label: '—', rate: 0 };

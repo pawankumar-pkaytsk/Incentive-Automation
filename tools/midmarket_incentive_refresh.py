@@ -101,6 +101,7 @@ def main():
 
     isgood = lambda r: str(r.get('good_seller')).lower() in ('1', 'true', 'yes')
     gcof = lambda sid: cn((m7753.get(sid) or {}).get('growth_consultant_name'))
+    names = {str(r['seller_id']): (str(r.get('seller_name') or '').strip() or str(r['seller_id'])) for r in master}
 
     # Assigned universe for Spend/Live + go-live: team='HITS', not good_seller, GC is a known GL.
     assigned = {}
@@ -173,25 +174,35 @@ def main():
                     if so > 0 and (sid not in lastspend or dt > lastspend[sid]): lastspend[sid] = dt
 
         per = collections.defaultdict(lambda: {'assigned': 0, 'glive': 0, 'mdays': 0, 'gdays': 0, 'churn': 0,
-                                               'arrTarget': 0.0, 'arrAch': 0.0, 'sellers': 0, 'frozen': 0})
+                                               'arrTarget': 0.0, 'arrAch': 0.0, 'sellers': 0, 'frozen': 0,
+                                               'det': {}, 'churnDet': [], 'goliveDet': []})
+        # Churn is an EVENT inside the cycle, not a standing state: the >21-day idle threshold must
+        # be *crossed* within [s, evalEnd]. (Counting "currently idle" would re-charge a GL every
+        # month for the same seller, and using a future cycle end inflates idle days.)
+        evalEnd = min(e, today)
         for sid, gl in assigned.items():
             p = per[gl]; p['assigned'] += 1
             has_acct = bool((g7401.get(sid) or {}).get('google_ad_account_id'))
             glive = has_acct and cumg.get(sid, 0) > 1
             if glive: p['glive'] += 1
+            nm = names.get(sid, sid)
+            md = gd = 0
             mp = byseller.get(sid, {})
             for dt in days:
                 sm, sg, so = mp.get(dt, (0, 0, 0))
-                if sm > 0: p['mdays'] += 1
-                if glive and sg > 0: p['gdays'] += 1
-            # churn: spent >= threshold historically, then idle > 21 days as of cycle end
-            if cumall.get(sid, 0) >= CHURN_SPEND:
-                ls = lastspend.get(sid)
-                if ls:
-                    idle = (e - datetime.date.fromisoformat(ls)).days
-                    if idle > CHURN_IDLE_DAYS: p['churn'] += 1
-                else:
+                if sm > 0: md += 1
+                if glive and sg > 0: gd += 1
+            p['mdays'] += md; p['gdays'] += gd
+            p['det'][sid] = {'sid': sid, 'n': nm, 'md': md, 'gd': gd, 'live': 1 if glive else 0}
+            p['goliveDet'].append({'sid': sid, 'n': nm, 'live': 1 if glive else 0,
+                                   'acct': 1 if has_acct else 0, 'gspend': round(cumg.get(sid, 0), 2)})
+            ls = lastspend.get(sid)
+            if cumall.get(sid, 0) >= CHURN_SPEND and ls:
+                cross = datetime.date.fromisoformat(ls) + datetime.timedelta(days=CHURN_IDLE_DAYS)
+                if s <= cross <= evalEnd:
                     p['churn'] += 1
+                    p['churnDet'].append({'sid': sid, 'n': nm, 'last': ls, 'cross': cross.isoformat(),
+                                          'spend': round(cumall.get(sid, 0), 2)})
 
         ym = yr * 100 + mo
         for r in cohort:
@@ -205,10 +216,11 @@ def main():
             frozen = (cm == ym)
             age = mdiff(h1, cm if frozen else ym)
             p = per[gl]
-            p['arrTarget'] += TARGET[min(max(age, 0), 5)]
-            p['arrAch'] += alut.get((sid, ym), 0.0)
-            p['sellers'] += 1
+            t_ = TARGET[min(max(age, 0), 5)]; a_ = alut.get((sid, ym), 0.0)
+            p['arrTarget'] += t_; p['arrAch'] += a_; p['sellers'] += 1
             if frozen: p['frozen'] += 1
+            d = p['det'].setdefault(sid, {'sid': sid, 'n': names.get(sid, sid), 'md': 0, 'gd': 0, 'live': 0})
+            d.update({'age': age, 't': round(t_, 2), 'a': round(a_, 2), 'f': 1 if frozen else 0})
 
         # HIT2 conversions in this CALENDAR month — browser maps these to a GL via the handover sheet.
         hit2 = []
@@ -230,6 +242,10 @@ def main():
                 'googleSL': round(p['gdays'] / (nd * gl_ct) * 100, 2) if nd and gl_ct else None,
                 'golive': round(gl_ct / a * 100, 2) if a else None,
                 'churn': p['churn'],
+                # per-seller detail for drill-downs
+                'det': sorted(p['det'].values(), key=lambda x: -(x.get('a') or 0)),
+                'churnDet': sorted(p['churnDet'], key=lambda x: x['last']),
+                'goliveDet': sorted(p['goliveDet'], key=lambda x: (-x['live'], x['n'])),
             }
         out_months[key] = {'cycle': [s.isoformat(), e.isoformat()], 'settledDays': nd,
                            'gls': gls, 'hit2': hit2, 'targets': targets_by_period.get(key, {})}

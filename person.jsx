@@ -334,12 +334,13 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
     const gates = m.mmGates || [];
     const pctOr = (v) => v == null ? '—' : v.toFixed(0) + '%';
     // Each step of the multiplier chain: label, value, multiplier, gate rule, failed?
+    const D = window.Drill;
     const CHAIN = [
-      ['ARR', m.mmArrPct == null ? '—' : m.mmArrPct.toFixed(0) + '%', m.mmArrMult, '≥85% to qualify · ≥150%→1.25× · ≥200%→2×', m.mmArrPct == null || m.mmArrPct < 85],
-      ['Churn', String(m.mmChurn || 0), m.mmChurnMult, '0→1× · 1→0.5× · 2+→0', m.mmChurnMult === 0],
-      ['Spend / Live — Meta', pctOr(m.mmMetaSL), m.mmMetaMult, '<60→0 · 60–80→1× · >80→1.25×', m.mmMetaSL == null || m.mmMetaSL < 60],
-      ['Spend / Live — Google', pctOr(m.mmGoogleSL), m.mmGoogMult, '<65→0 · 65–75→1× · >75→1.2×', m.mmGoogleSL == null || m.mmGoogleSL < 65],
-      ['Google go-lives', pctOr(m.mmGolive), m.mmGoliveMult, '<50→0 · 50–65→1× · >65→1.25×', m.mmGolive == null || m.mmGolive < 50],
+      ['ARR', m.mmArrPct == null ? '—' : m.mmArrPct.toFixed(0) + '%', m.mmArrMult, '≥85% to qualify · ≥150%→1.25× · ≥200%→2×', m.mmArrPct == null || m.mmArrPct < 85, () => D.mmArr(m, person.name)],
+      ['Churn', String(m.mmChurn || 0), m.mmChurnMult, '0→1× · 1→0.5× · 2+→0', m.mmChurnMult === 0, () => D.mmChurn(m, person.name)],
+      ['Spend / Live — Meta', pctOr(m.mmMetaSL), m.mmMetaMult, '<60→0 · 60–80→1× · >80→1.25×', m.mmMetaSL == null || m.mmMetaSL < 60, () => D.mmSL(m, person.name, 'meta')],
+      ['Spend / Live — Google', pctOr(m.mmGoogleSL), m.mmGoogMult, '<65→0 · 65–75→1× · >75→1.2×', m.mmGoogleSL == null || m.mmGoogleSL < 65, () => D.mmSL(m, person.name, 'google')],
+      ['Google go-lives', pctOr(m.mmGolive), m.mmGoliveMult, '<50→0 · 50–65→1× · >65→1.25×', m.mmGolive == null || m.mmGolive < 50, () => D.mmGolive(m, person.name)],
     ];
     return (
       <div style={{ animation: 'fadeUp 360ms ease both' }}>
@@ -351,7 +352,8 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
               <div style={{ padding: '16px 16px 4px' }}><SectionTitle eyebrow="Full transparency · 1k-5k GL" title={`How your ${I.PERIOD} incentive is calculated`} /></div>
               {hasTgt ? (
                 <div style={{ padding: '0 16px 10px' }}>
-                  <MathRow label="HIT2 achieved (calendar month)" detail="Conversions from hit_master_data, credited via the HITS-2 handover sheet" value={String(m.mmHits)} />
+                  <MathRow label="HIT2 achieved (calendar month)" detail="Conversions from hit_master_data, credited via the HITS-2 handover sheet"
+                    value={<DrillNumber payload={D.mmHit2(m, person.name)} title="See which conversions counted" style={{ font: '700 13px/1 var(--sd-font-sans)' }}>{String(m.mmHits)}</DrillNumber>} />
                   <MathRow label="HITS target" detail="From the HITS target sheet" value={String(m.mmTarget)} indent />
                   <MathRow label="Achievement" detail={band ? band.label : '—'} value={m.achievementPct == null ? '—' : I.pct(m.achievementPct, 0)} accent={(m.achievementPct || 0) >= 100 ? 'var(--sd-green-700)' : (m.achievementPct || 0) >= 50 ? 'var(--sd-heading)' : 'var(--sd-red-700)'} indent />
                 </div>
@@ -365,7 +367,9 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
                 <div style={{ padding: '0 16px 10px' }}>
                   <div style={{ font: '600 10px/1 var(--sd-font-sans)', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--sd-fg-3)', margin: '8px 2px 6px' }}>Multipliers &amp; gates</div>
                   {CHAIN.map((c) => (
-                    <MathRow key={c[0]} label={c[0]} detail={c[3]} value={c[1] + '  ·  ×' + c[2]} accent={c[4] ? 'var(--sd-red-700)' : (c[2] > 1 ? 'var(--sd-green-700)' : 'var(--sd-fg-2)')} indent />
+                    <MathRow key={c[0]} label={c[0]} detail={c[3]} indent
+                      accent={c[4] ? 'var(--sd-red-700)' : (c[2] > 1 ? 'var(--sd-green-700)' : 'var(--sd-fg-2)')}
+                      value={<DrillNumber payload={c[5]()} color={c[4] ? 'var(--sd-red-700)' : (c[2] > 1 ? 'var(--sd-green-700)' : 'var(--sd-fg-1)')} style={{ font: '700 13px/1 var(--sd-font-sans)' }}>{c[1] + '  ·  ×' + c[2]}</DrillNumber>} />
                   ))}
                 </div>
               ) : null}

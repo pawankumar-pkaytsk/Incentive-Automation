@@ -345,6 +345,8 @@
           mmMetaMult: metaMult, mmGoogMult: googMult, mmGoliveMult: goliveMult, mmChurnMult: churnMult,
           mmAssigned: gi ? gi.assigned : null, mmGlive: gi ? gi.glive : null, mmDays: gi ? gi.days : null,
           mmGates: gates, mmHasInputs: !!gi,
+          mmDet: gi ? (gi.det || []) : [], mmChurnDet: gi ? (gi.churnDet || []) : [], mmGoliveDet: gi ? (gi.goliveDet || []) : [],
+          mmCycle: mi ? mi.cycle : null,
           adhocPct: 0, adhocAbs: 0, adhocNote: '',
           dataHealth: !gi ? 'missing' : 'ok',
           missingFields: !gi ? ['No computed 1k-5k inputs for ' + m.label + ' — run midmarket_incentive_refresh.py'] : [] });
