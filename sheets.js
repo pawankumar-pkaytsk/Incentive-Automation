@@ -122,7 +122,11 @@
     if (t === 'revenue' || d.includes('escalation')) return 'revival';
     return 'core';   // default HITS team (GM is assigned only from card 12101)
   }
-  function logicFor(team) { return team === 'hypercare' ? 'hypercare' : team === 'kae' ? 'kae' : team === 'revival' ? 'revival' : team === 'campaign' ? 'campaign' : team === 'midmarket' ? 'midmarket' : 'core'; }
+  function logicFor(team) { return team === 'hypercare' ? 'hypercare' : team === 'kae' ? 'kae' : team === 'revival' ? 'revival' : team === 'campaign' ? 'campaign' : team === 'midmarket' ? 'midmarket' : team === 'goodseller' ? 'goodseller' : team === 'ai' ? 'ai' : 'core'; }
+  // Teams whose incentive isn't computed yet — the app shows a notice instead of a number.
+  const NOTICE = { goodseller: 'Data awaiting from Rohit', ai: 'Flat incentive for now' };
+  // Per-person incentive overrides (empId → fixed final %).
+  const FIXED_PCT = { 'WM363': 15 };
 
   /* ---- Fuzzy name resolver (Nikita S → Nikita Sinha, etc.) ----------- */
   const norm = (s) => String(s == null ? '' : s).replace(/[\u00a0\u200b\u200c\u200d]/g, ' ').toLowerCase().replace(/[._]/g, ' ').replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -170,8 +174,15 @@
     // A person is a GM only if the card lists them as one (resolved by email, then name). This
     // overrides roster designations — nobody becomes a GM by title or by classify() default.
     const resolvePerson = (email, name) => byEmail[String(email || '').trim().toLowerCase()] || resolve(name);
-    const gmGCs = {}, gmSet = {};
-    row('gmmap').forEach((mp) => { const gmP = resolvePerson(mp.gmEmail, mp.gm), gcP = resolvePerson(mp.gcEmail, mp.gc); if (gmP) gmSet[gmP.email] = true; if (!gmP || !gcP) return; (gmGCs[gmP.email] || (gmGCs[gmP.email] = [])).push(gcP); });
+    const gmGCs = {}, gmSet = {}, clByEmail = {};
+    row('gmmap').forEach((mp) => {
+      const gmP = resolvePerson(mp.gmEmail, mp.gm), gcP = resolvePerson(mp.gcEmail, mp.gc);
+      const cl = String(mp.cl || '').trim();
+      if (gmP) { gmSet[gmP.email] = true; if (cl) clByEmail[gmP.email] = cl; }
+      if (gcP && cl) clByEmail[gcP.email] = cl;
+      if (!gmP || !gcP) return;
+      (gmGCs[gmP.email] || (gmGCs[gmP.email] = [])).push(gcP);
+    });
     // Campaign GCs — hard-coded for June (Jul+ will come from a rolling query). Force onto the
     // campaign team; synthesize any missing from the roster so all listed GCs show.
     const campaignByEmail = {}, campaignSet = {};
@@ -208,6 +219,7 @@
     people.forEach((p) => {
       p.team = gmSet[p.email] ? 'gm' : (revivalGCs[p.email] ? 'revival' : (campaignSet[p.email] ? 'campaign' : (mmSet[p.email] ? 'midmarket' : classify(p))));
       if (mmSet[p.email]) p.mmPeriods = mmPeriods[p.email] || {};
+      p.cl = clByEmail[p.email] || '';        // cluster lead (card 12101)
       p.logic = logicFor(p.team);
       p.role = ADMINS.includes(p.email) ? 'admin' : ((gmSet[p.email] || p.reports.length) ? 'manager' : 'gc');
     });
@@ -308,6 +320,11 @@
         const rb = revivalBandOf(rv.count);
         const amount = rv.count * rb.rate;
         Object.assign(rec, { threeWeekCounted: [], weightedHits: 0, rawHits: 0, target: 0, achievementPct: null, rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null, coreBand: null, perHitRate: null, outputPct: null, finalPct: null, spend: null, task: null, callback: null, escalations: null, revivalCount: rv.count, revivalRows: rv.rows.slice().sort((a, b) => a.date < b.date ? -1 : 1), revivalBand: rb, revivalRate: rb.rate, amount: amount, adhocPct: 0, adhocAbs: 0, adhocNote: '', dataHealth: 'ok', missingFields: [] });
+        return;
+      }
+      if (p.logic === 'goodseller' || p.logic === 'ai') {
+        // Not computed yet — surface a notice instead of a number.
+        Object.assign(rec, { threeWeekCounted: [], weightedHits: 0, rawHits: 0, target: 0, achievementPct: null, rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null, coreBand: null, perHitRate: null, outputPct: null, finalPct: null, spend: null, task: null, callback: null, escalations: null, notice: NOTICE[p.logic], adhocPct: 0, adhocAbs: 0, adhocNote: '', dataHealth: 'ok', missingFields: [] });
         return;
       }
       if (p.logic === 'midmarket') {
@@ -420,14 +437,17 @@
         const achievementPct = tgt > 0 ? (weighted / tgt) * 100 : null;
         const output = tgt > 0 ? (weighted / tgt) * 25 : null;          // (HITs ÷ Target) × 25%
         const ops = gmOpsMult(gcs, m.key);
-        const finalPct = output == null ? null : output * ops.mult;
+        // Per-person fixed override (e.g. WM363 is always 15%) wins over the computed figure.
+        const fixed = FIXED_PCT[gm.empId];
+        const finalPct = fixed != null ? fixed : (output == null ? null : output * ops.mult);
         gm.byMonth[m.key].gm = {
           weightedHits: weighted, rawHits: raw, threeWeekCounted: threeWk, counted: hits,
           target: tgt, achievementPct, outputPct: output,
           opsMult: ops.mult, opsRule: ops.rule, opsGreen: ops.g, opsYellow: ops.y, opsRed: ops.r,
           finalPct, teamSize: gcs.length,
+          fixedPct: fixed != null ? fixed : null,
           is1k5k, kickerPct: 0, kickerNote: is1k5k ? 'GL kicker (1/5 of GL incentive) pending GL logic' : '',
-          dataHealth: tgt === 0 ? 'missing' : 'ok',
+          dataHealth: fixed != null ? 'ok' : (tgt === 0 ? 'missing' : 'ok'),
         };
       });
     });

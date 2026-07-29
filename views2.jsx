@@ -48,6 +48,8 @@ const RosterRow = ({ person, onOpen, index, rank }) => {
           <span className="sd-num" style={{ font: '600 13px var(--sd-font-sans)', color: m.strikeCount ? 'var(--sd-red-500)' : 'var(--sd-green-700)' }}>{m.strikeCount} strike{m.strikeCount === 1 ? '' : 's'}</span>
         ) : person.logic === 'revival' ? (
           <span className="sd-num" style={{ font: '600 13px var(--sd-font-sans)', color: m.amount > 0 ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' }}>{m.revivalCount} revived{m.amount > 0 ? '' : ' · below 21'}</span>
+        ) : m.notice ? (
+          <span style={{ font: '500 12px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>{m.notice}</span>
         ) : person.logic === 'midmarket' ? (
           m.mmTarget == null
             ? <span style={{ font: '400 13px var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>No target</span>
@@ -64,9 +66,11 @@ const RosterRow = ({ person, onOpen, index, rank }) => {
           </div>
         ) : <span style={{ font: '400 13px var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>—</span>}
       </div>
-      <div className="sd-num" style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.logic === 'kae' || person.logic === 'revival' || person.logic === 'campaign' ? '—' : person.logic === 'midmarket' ? String(m.mmHits) : src.weightedHits.toFixed(1)}</div>
+      <div className="sd-num" style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{m.notice || person.logic === 'kae' || person.logic === 'revival' || person.logic === 'campaign' ? '—' : person.logic === 'midmarket' ? String(m.mmHits) : src.weightedHits.toFixed(1)}</div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        {person.logic === 'kae' || person.logic === 'revival'
+        {m.notice
+          ? <span style={{ font: '500 12px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>—</span>
+          : person.logic === 'kae' || person.logic === 'revival'
           ? <span className="sd-num" style={{ font: '700 14px/1 var(--sd-font-sans)', color: m.amount > 0 ? 'var(--sd-primary)' : 'var(--sd-fg-3)' }}>{I.inr(m.amount)}</span>
           : isGM
             ? <span className="sd-num" style={{ font: '700 14px/1 var(--sd-font-sans)', color: src.finalPct != null ? 'var(--sd-primary)' : 'var(--sd-red-500)' }}>{src.finalPct != null ? I.pct(src.finalPct, 1) : 'Pending'}</span>

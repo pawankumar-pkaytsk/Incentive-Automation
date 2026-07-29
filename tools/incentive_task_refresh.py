@@ -150,6 +150,7 @@ def main():
         mappings.append({
             'gm': gm, 'gmEmail': str(r.get('gm_email_id') or '').strip().lower(),
             'gc': gc, 'gcEmail': str(r.get('core_gc_email_id') or '').strip().lower(),
+            'cl': str(r.get('cl') or '').strip(), 'clEmail': str(r.get('cl_email_id') or '').strip().lower(),
         })
     gm_data = {'generatedAt': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'), 'card': GM_CARD, 'mappings': mappings}
     json.dump(gm_data, open(GM_OUT, 'w'), separators=(',', ':'))

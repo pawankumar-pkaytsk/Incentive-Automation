@@ -102,8 +102,12 @@
     if (p.team === 'revival') return 'revival';
     if (p.team === 'campaign') return 'campaign';
     if (p.team === 'midmarket') return 'midmarket';
+    if (p.team === 'goodseller') return 'goodseller';
+    if (p.team === 'ai') return 'ai';
     return 'core';
   }
+  // Teams whose incentive isn't computed yet — show a notice instead of a number.
+  const NOTICE = { goodseller: 'Data awaiting from Rohit', ai: 'Flat incentive for now' };
 
   /* ---- Seller name pool (for demo HIT rows) -------------------------- */
   const BRANDS = ['Urban Threads', 'Kayra Fashions', 'Nykaa Looks', 'Veda Organics', 'Trendza', 'Sole Mate', 'Glow Co', 'Denim Bay', 'Lumen Décor', 'Spice Route', 'Petals & Co', 'FitFlex', 'Aroma Wick', 'Maple Kids', 'Zen Living', 'Rangoli Crafts', 'Pure Bloom', 'Crave Snacks', 'Aura Beauty', 'Nestwell'];
@@ -153,6 +157,7 @@
     if (logic === 'revival') return computeRevivalMonth(p, raw);
     if (logic === 'campaign') return computeCampaignMonth(p, raw);
     if (logic === 'midmarket') return computeMidmarketMonth(p, raw);
+    if (logic === 'goodseller' || logic === 'ai') return computeNoticeMonth(p, raw, logic);
     if (logic === 'core') {
       const rng = rngFor(p.empId + '|inp|' + raw.key);
       // WES sample: social-media, SOS, internal escalation counts (deduped per seller/day upstream)
@@ -300,6 +305,18 @@
     { min: 0,   pct: 0,  label: '< 50% of target' },
   ];
   function mmBand(ach) { return MM_BANDS.find((b) => ach >= b.min) || MM_BANDS[MM_BANDS.length - 1]; }
+  function computeNoticeMonth(p, raw, logic) {
+    return {
+      ...raw, logic: logic,
+      counted: [], disposed: [], threeWeekCounted: [], weightedHits: 0, rawHits: 0, achievementPct: null,
+      rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null,
+      coreBand: null, perHitRate: null, outputPct: null, finalPct: null,
+      spend: null, task: null, callback: null, escalations: null,
+      notice: NOTICE[logic],
+      adhocPct: 0, adhocAbs: 0, adhocNote: '', dataHealth: 'ok', missingFields: [],
+    };
+  }
+
   function computeMidmarketMonth(p, raw) {
     const rng = rngFor(p.empId + '|mm|' + raw.key);
     const target = Math.max(1, Math.round(between(rng(), 1, 3)));

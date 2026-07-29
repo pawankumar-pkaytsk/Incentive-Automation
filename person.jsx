@@ -25,12 +25,14 @@ const PersonHeader = ({ person, viewer }) => {
           <Badge tone="primary" style={{ background: team.tint, color: team.accent }}><Icon name={team.icon} size={13} /> {team.name}</Badge>
           <span style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.designation}</span>
           <span style={{ font: '400 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>· {person.empId}</span>
-          <Badge tone={person.logic === 'hypercare' ? 'info' : 'primary'} dot>{person.logic === 'hypercare' ? 'Hypercare logic' : person.logic === 'kae' ? 'KAE logic' : person.logic === 'revival' ? 'Revival logic' : person.logic === 'campaign' ? 'Campaign logic' : person.logic === 'midmarket' ? '1k-5k logic' : isGM ? 'GM rollup' : 'Core GC logic'}</Badge>
+          {person.cl ? <span style={{ font: '400 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>· CL {person.cl}</span> : null}
+          <Badge tone={person.logic === 'hypercare' ? 'info' : 'primary'} dot>{person.logic === 'hypercare' ? 'Hypercare logic' : person.logic === 'kae' ? 'KAE logic' : person.logic === 'revival' ? 'Revival logic' : person.logic === 'campaign' ? 'Campaign logic' : person.logic === 'midmarket' ? '1k-5k logic' : person.logic === 'goodseller' || person.logic === 'ai' ? 'Not yet calculated' : isGM ? 'GM rollup' : 'Core GC logic'}</Badge>
         </div>
       </div>
       <div style={{ textAlign: 'right', minWidth: 160 }}>
         <div style={{ font: '600 11px/1 var(--sd-font-sans)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--sd-fg-2)', marginBottom: 6 }}>{I.PERIOD} · Final incentive</div>
-        {person.logic === 'kae' || person.logic === 'revival' ? <div style={{ font: '700 40px/1 var(--sd-font-sans)', color: m.amount > 0 ? 'var(--sd-primary)' : 'var(--sd-fg-3)' }}>{I.inr(m.amount)}</div>
+        {m.notice ? <div style={{ font: '600 18px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>{m.notice}</div>
+          : person.logic === 'kae' || person.logic === 'revival' ? <div style={{ font: '700 40px/1 var(--sd-font-sans)', color: m.amount > 0 ? 'var(--sd-primary)' : 'var(--sd-fg-3)' }}>{I.inr(m.amount)}</div>
           : isGM ? (m.gm && m.gm.finalPct != null ? <div style={{ font: '700 40px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}><CountUp value={m.gm.finalPct} format={(v) => I.pct(v, 2)} /></div> : <div style={{ font: '700 22px/1.1 var(--sd-font-sans)', color: 'var(--sd-red-500)' }}>Pending data</div>)
           : (m.finalPct != null ? <div style={{ font: '700 40px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}><CountUp value={finalPctAdj} format={(v) => I.pct(v, 2)} /></div>
             : <div style={{ font: '700 22px/1.1 var(--sd-font-sans)', color: 'var(--sd-red-500)' }}>Pending data</div>)}
@@ -103,7 +105,7 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
                 {gm.is1k5k ? <MathRow label="1k–5k GL kicker" detail={gm.kickerNote} value="pending" accent="var(--sd-orange-700)" indent /> : null}
               </div>
               <div style={{ padding: '4px 16px 16px' }}>
-                <MathRow strong label={`Final incentive · ${I.PERIOD}`} detail={gm.outputPct == null ? 'GM target missing' : `Output ${I.pct(gm.outputPct, 2)} × ${gm.opsMult.toFixed(2)}`} value={gm.finalPct == null ? 'Pending' : I.pct(gm.finalPct, 2)} />
+                <MathRow strong label={`Final incentive · ${I.PERIOD}`} detail={gm.fixedPct != null ? 'Fixed incentive — overrides the computed figure' : (gm.outputPct == null ? 'GM target missing' : `Output ${I.pct(gm.outputPct, 2)} × ${gm.opsMult.toFixed(2)}`)} value={gm.finalPct == null ? 'Pending' : I.pct(gm.finalPct, 2)} />
               </div>
             </Card>
             <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
@@ -324,6 +326,33 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
             </Card>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  /* ---------- Teams with no computed incentive yet (Good Seller · AI) ---------- */
+  if (m.notice) {
+    return (
+      <div style={{ animation: 'fadeUp 360ms ease both' }}>
+        {onBack ? <BackBtn onBack={onBack} /> : null}
+        <PersonHeader person={person} viewer={viewer} />
+        <Card variant="regular" padding={0} style={{ overflow: 'hidden', maxWidth: 640 }}>
+          <div style={{ padding: '16px 16px 4px' }}><SectionTitle eyebrow={'Full transparency · ' + team.name} title={`${I.PERIOD} incentive`} /></div>
+          <div style={{ padding: '4px 16px 20px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <Icon name="clock" size={20} style={{ color: 'var(--sd-fg-3)', flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <div style={{ font: '600 15px/1.4 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>{m.notice}</div>
+              <div style={{ font: '400 13px/1.6 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginTop: 6 }}>
+                No incentive is calculated for {team.name} in the app yet, so nothing here is a payable figure.
+              </div>
+              {person.cl ? (
+                <div style={{ font: '400 13px/1.6 var(--sd-font-sans)', color: 'var(--sd-fg-2)', marginTop: 10 }}>
+                  Cluster lead · <b style={{ color: 'var(--sd-heading)' }}>{person.cl}</b>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </Card>
       </div>
     );
   }
