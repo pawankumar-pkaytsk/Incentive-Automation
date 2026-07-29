@@ -111,12 +111,12 @@
 
   function classify(p) {
     const d = (p.designation || '').toLowerCase(), t = (p.teamRaw || '').trim().toLowerCase();
-    // NOTE: GM membership is NOT derived here — it comes STRICTLY from Metabase card 12101.
-    // classify() never returns 'gm'; a person is a GM only if card 12101 lists them as one.
+    // NOTE: GM membership comes STRICTLY from card 12101, and 1k-5k membership STRICTLY from
+    // card 12100 — classify() never returns 'gm' or 'midmarket'. The People sheet's team column
+    // is NOT a source for either (it lists people who aren't on those teams for the period).
     if (d.includes('key account')) return 'kae';
     if (d.includes('ai ')) return 'ai';
     if (d.includes('campaign')) return 'campaign';
-    if (t === '1k-5k' || t === '1k5k' || t.includes('mid market') || t.includes('midmarket')) return 'midmarket';
     if (t.includes('good seller')) return 'goodseller';
     if (t.includes('hyper care') || t.includes('hypercare')) return 'hypercare';
     if (t === 'revenue' || d.includes('escalation')) return 'revival';
