@@ -263,19 +263,26 @@
 
     // HITS-2 handover sheet → 1k-5k GL hits. A row counts as a hit for the GL named in col E
     // only when the handover status (col I) is TRUE. Bucketed into the 20th→19th cycle by HIT date.
-    const mmHitsByPM = {};
+    // The HITS-2 handover sheet is the seller → GL *mapping* (card 10453 decides which sellers
+    // converted and when; 7753 blanks out post-move so it can't be used for HIT2 credit).
+    const hits2GLBySeller = {};
     row('hits2').forEach((r) => {
       const c = SHEETS.hits2.col;
-      if (String(r[c.handover] || '').trim().toUpperCase() !== 'TRUE' && r[c.handover] !== true) return;
-      const glName = String(r[c.glName] || '').trim(); if (!glName) return;
-      const who = mmPersonByName[campNorm(glName)] || resolve(glName); if (!who) return;
-      const d = toDate(r[c.hitDate]); if (!d) return;
-      MONTHS.forEach((m) => {
-        if (!inWindow(d, cycleWindowFor(m.month, m.year))) return;
-        const k = who.email + '|' + m.key;
+      const sid = String(r[c.sellerId] || '').trim(), glName = String(r[c.glName] || '').trim();
+      if (sid && glName && !hits2GLBySeller[sid]) hits2GLBySeller[sid] = glName;
+    });
+    // HIT2 achieved per GL per period — count from the snapshot (card 10453, calendar month),
+    // credited to the GL named in the handover sheet.
+    const mmHitsByPM = {};
+    const mmInc = (RAW.mmInc && RAW.mmInc.months) || {};
+    Object.keys(mmInc).forEach((pkey) => {
+      (mmInc[pkey].hit2 || []).forEach((h) => {
+        const glName = hits2GLBySeller[h.sid]; if (!glName) return;
+        const who = mmPersonByName[campNorm(glName)] || resolve(glName); if (!who) return;
+        const k = who.email + '|' + pkey;
         const store = mmHitsByPM[k] || (mmHitsByPM[k] = { count: 0, rows: [] });
         store.count++;
-        store.rows.push({ date: fmtDate(d), seller: String(r[c.sellerName] || '').trim(), sid: String(r[c.sellerId] || '').trim(), gl: glName });
+        store.rows.push({ date: pkey, seller: h.name || h.sid, sid: h.sid, gl: glName });
       });
     });
 
@@ -309,10 +316,38 @@
         const hasTgt = tgt != null && tgt > 0;
         const ach = hasTgt ? (hv.count / tgt) * 100 : null;
         const band = ach == null ? null : mmBandOf(ach);
-        const output = band ? band.pct : null;
-        // Only the HITs output tier is implemented; the ARR/churn/spend-live/go-live/NPS
-        // multipliers are pending their data sources, so finalPct is the unlocked pool only.
-        Object.assign(rec, { threeWeekCounted: [], weightedHits: hv.count, rawHits: hv.count, target: hasTgt ? tgt : 0, achievementPct: ach, rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null, coreBand: null, perHitRate: null, outputPct: output, finalPct: output, spend: null, task: null, callback: null, escalations: null, mmHits: hv.count, mmRows: hv.rows.slice().sort((a, b) => a.date < b.date ? -1 : 1), mmBand: band, mmTarget: hasTgt ? tgt : null, mmPending: true, adhocPct: 0, adhocAbs: 0, adhocNote: '', dataHealth: hasTgt ? 'attention' : 'missing', missingFields: hasTgt ? ['ARR / churn / Spend-Live / go-live / NPS multipliers pending — showing unlocked pool only'] : ['No 1k-5k HITS target for ' + m.label + ' (card 11322)'] });
+        const base = band ? band.pct : 0;
+        // Computed inputs for this GL/period from the snapshot (ARR, Spend/Live, go-live, churn).
+        const mi = (RAW.mmInc && RAW.mmInc.months && RAW.mmInc.months[m.key]) || null;
+        const gi = mi && mi.gls ? (mi.gls[p.name] || null) : null;
+        const arrPct = gi ? gi.arrPct : null;
+        const metaSL = gi ? gi.metaSL : null, googleSL = gi ? gi.googleSL : null, golive = gi ? gi.golive : null;
+        const churn = gi ? (gi.churn || 0) : 0;
+        // Multipliers
+        const arrMult = arrPct == null ? 1 : (arrPct >= 200 ? 2.0 : (arrPct >= 150 ? 1.25 : 1.0));
+        const churnMult = churn === 0 ? 1 : (churn === 1 ? 0.5 : 0);
+        const metaMult = (metaSL != null && metaSL > 80) ? 1.25 : 1.0;
+        const googMult = (googleSL != null && googleSL > 75) ? 1.2 : 1.0;
+        const goliveMult = (golive != null && golive > 65) ? 1.25 : 1.0;
+        // Hard gates — any failure zeroes the whole incentive
+        const gates = [];
+        if (base === 0) gates.push('HIT2 pool 0%');
+        if (arrPct == null || arrPct < 85) gates.push('ARR < 85%');
+        if (churnMult === 0) gates.push(churn + ' churns');
+        if (metaSL == null || metaSL < 60) gates.push('Meta S/L < 60%');
+        if (googleSL == null || googleSL < 65) gates.push('Google S/L < 65%');
+        if (golive == null || golive < 50) gates.push('Go-live < 50%');
+        const finalPct = gates.length ? 0 : +(base * arrMult * churnMult * metaMult * googMult * goliveMult).toFixed(2);
+        Object.assign(rec, { threeWeekCounted: [], weightedHits: hv.count, rawHits: hv.count, target: hasTgt ? tgt : 0, achievementPct: ach, rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null, coreBand: null, perHitRate: null, outputPct: base, finalPct: finalPct, spend: null, task: null, callback: null, escalations: null,
+          mmHits: hv.count, mmRows: hv.rows, mmBand: band, mmTarget: hasTgt ? tgt : null,
+          mmArrPct: arrPct, mmArrTarget: gi ? gi.arrTarget : null, mmArrAch: gi ? gi.arrAch : null, mmArrMult: arrMult,
+          mmMetaSL: metaSL, mmGoogleSL: googleSL, mmGolive: golive, mmChurn: churn,
+          mmMetaMult: metaMult, mmGoogMult: googMult, mmGoliveMult: goliveMult, mmChurnMult: churnMult,
+          mmAssigned: gi ? gi.assigned : null, mmGlive: gi ? gi.glive : null, mmDays: gi ? gi.days : null,
+          mmGates: gates, mmHasInputs: !!gi,
+          adhocPct: 0, adhocAbs: 0, adhocNote: '',
+          dataHealth: !gi ? 'missing' : 'ok',
+          missingFields: !gi ? ['No computed 1k-5k inputs for ' + m.label + ' — run midmarket_incentive_refresh.py'] : [] });
         return;
       }
       if (p.logic === 'campaign') {
@@ -529,6 +564,13 @@
       RAW.mmtargets = (mj && mj.targets) || [];
       I.MIDMARKET_META = mj ? { generatedAt: mj.generatedAt, gls: RAW.mmmap.length, targets: RAW.mmtargets.length, cards: mj.cards } : null;
     } catch (e) { RAW.mmmap = []; RAW.mmtargets = []; I.MIDMARKET_META = null; }
+    // 1k-5k computed inputs: ARR target/achieved, Meta+Google Spend/Live, go-live, churn, HIT2 list.
+    try {
+      const ir = await fetch('midmarket_incentive.json?_=' + Date.now(), { cache: 'no-store' });
+      const ij = ir.ok ? await ir.json() : null;
+      RAW.mmInc = ij || null;
+      I.MMINC_META = ij ? { generatedAt: ij.generatedAt, assigned: ij.assignedTotal, target: ij.target } : null;
+    } catch (e) { RAW.mmInc = null; I.MMINC_META = null; }
     say('Calculating incentives…');
     const { people, MONTHS } = computeAll(RAW);
     if (!people.length) throw new Error('People sheet returned no rows');

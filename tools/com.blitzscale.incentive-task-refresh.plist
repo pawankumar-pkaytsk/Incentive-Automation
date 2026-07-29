@@ -7,9 +7,9 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/python3</string>
-        <string>/Users/pawank/metabase-arr-refresh/incentive_task_refresh.py</string>
-        <string>--push</string>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>/usr/bin/python3 /Users/pawank/metabase-arr-refresh/incentive_task_refresh.py --push; /usr/bin/python3 /Users/pawank/metabase-arr-refresh/midmarket_incentive_refresh.py --push</string>
     </array>
 
     <key>WorkingDirectory</key>

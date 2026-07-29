@@ -331,13 +331,15 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
   /* ---------- HITS 1k-5k GL (HITs unlocks the pool; multipliers pending) ---------- */
   if (person.logic === 'midmarket') {
     const band = m.mmBand, rows = m.mmRows || [], hasTgt = m.mmTarget != null;
-    const PENDING = [
-      ['ARR', 'Qualifier ≥85% of ARR target · 1.5×→1.25×, 2×→2×'],
-      ['Churn', '1 churn → 0.5× · 2 churns → 0'],
-      ['Spend / Live — Meta', '<60% → 0 · 60–80% → 1× · >80% → 1.25×'],
-      ['Spend / Live — Google', '<65% → 0 · 65–75% → 1× · >75% → 1.2×'],
-      ['Google go-lives', '<50% → 0 · 50–65% → 1× · >65% → 1.25×'],
-      ['NPS', 'Bands not yet defined'],
+    const gates = m.mmGates || [];
+    const pctOr = (v) => v == null ? '—' : v.toFixed(0) + '%';
+    // Each step of the multiplier chain: label, value, multiplier, gate rule, failed?
+    const CHAIN = [
+      ['ARR', m.mmArrPct == null ? '—' : m.mmArrPct.toFixed(0) + '%', m.mmArrMult, '≥85% to qualify · ≥150%→1.25× · ≥200%→2×', m.mmArrPct == null || m.mmArrPct < 85],
+      ['Churn', String(m.mmChurn || 0), m.mmChurnMult, '0→1× · 1→0.5× · 2+→0', m.mmChurnMult === 0],
+      ['Spend / Live — Meta', pctOr(m.mmMetaSL), m.mmMetaMult, '<60→0 · 60–80→1× · >80→1.25×', m.mmMetaSL == null || m.mmMetaSL < 60],
+      ['Spend / Live — Google', pctOr(m.mmGoogleSL), m.mmGoogMult, '<65→0 · 65–75→1× · >75→1.2×', m.mmGoogleSL == null || m.mmGoogleSL < 65],
+      ['Google go-lives', pctOr(m.mmGolive), m.mmGoliveMult, '<50→0 · 50–65→1× · >65→1.25×', m.mmGolive == null || m.mmGolive < 50],
     ];
     return (
       <div style={{ animation: 'fadeUp 360ms ease both' }}>
@@ -349,29 +351,52 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
               <div style={{ padding: '16px 16px 4px' }}><SectionTitle eyebrow="Full transparency · 1k-5k GL" title={`How your ${I.PERIOD} incentive is calculated`} /></div>
               {hasTgt ? (
                 <div style={{ padding: '0 16px 10px' }}>
-                  <MathRow label="HITs achieved (20th→19th)" detail="Handover = TRUE in the HITS-2 handover sheet" value={String(m.mmHits)} />
+                  <MathRow label="HIT2 achieved (calendar month)" detail="Conversions from hit_master_data, credited via the HITS-2 handover sheet" value={String(m.mmHits)} />
                   <MathRow label="HITS target" detail="From the HITS target sheet" value={String(m.mmTarget)} indent />
                   <MathRow label="Achievement" detail={band ? band.label : '—'} value={m.achievementPct == null ? '—' : I.pct(m.achievementPct, 0)} accent={(m.achievementPct || 0) >= 100 ? 'var(--sd-green-700)' : (m.achievementPct || 0) >= 50 ? 'var(--sd-heading)' : 'var(--sd-red-700)'} indent />
                 </div>
               ) : <div style={{ padding: '4px 16px 14px', font: '500 13px/1.5 var(--sd-font-sans)', color: 'var(--sd-red-700)' }}>No 1k-5k HITS target set for {m.label} — incentive can't be computed.</div>}
               {hasTgt ? (
-                <div style={{ padding: '4px 16px 16px' }}>
-                  <MathRow strong label="Incentive pool unlocked" detail={band ? band.label + ' → ' + band.pct + '% of the incentive' : '—'} value={band ? band.pct + '%' : '—'} />
+                <div style={{ padding: '4px 16px 10px' }}>
+                  <MathRow label="Incentive pool unlocked" detail={band ? band.label + ' → ' + band.pct + '% of the incentive' : '—'} value={band ? band.pct + '%' : '—'} accent={band && band.pct ? 'var(--sd-green-700)' : 'var(--sd-red-700)'} />
                 </div>
               ) : null}
+              {m.mmHasInputs ? (
+                <div style={{ padding: '0 16px 10px' }}>
+                  <div style={{ font: '600 10px/1 var(--sd-font-sans)', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--sd-fg-3)', margin: '8px 2px 6px' }}>Multipliers &amp; gates</div>
+                  {CHAIN.map((c) => (
+                    <MathRow key={c[0]} label={c[0]} detail={c[3]} value={c[1] + '  ·  ×' + c[2]} accent={c[4] ? 'var(--sd-red-700)' : (c[2] > 1 ? 'var(--sd-green-700)' : 'var(--sd-fg-2)')} indent />
+                  ))}
+                </div>
+              ) : null}
+              <div style={{ padding: '4px 16px 16px' }}>
+                <MathRow strong label={`Final incentive · ${I.PERIOD}`}
+                  detail={gates.length ? 'Gate failed: ' + gates.join(', ') : `${band ? band.pct : 0}% × ${m.mmArrMult} × ${m.mmChurnMult} × ${m.mmMetaMult} × ${m.mmGoogMult} × ${m.mmGoliveMult}`}
+                  value={m.finalPct == null ? '—' : I.pct(m.finalPct, 2)} />
+              </div>
             </Card>
+            {gates.length ? (
+              <Card variant="flat" padding={16} style={{ background: 'var(--sd-red-50)', borderColor: 'var(--sd-red-100)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <Icon name="warning-octagon" size={20} style={{ color: 'var(--sd-red-500)', flexShrink: 0 }} />
+                <div>
+                  <div style={{ font: '700 13px/1.3 var(--sd-font-sans)', color: 'var(--sd-red-900)' }}>Incentive is 0% — {gates.length} gate{gates.length === 1 ? '' : 's'} failed</div>
+                  <div style={{ font: '400 12px/1.6 var(--sd-font-sans)', color: 'var(--sd-red-900)', marginTop: 4 }}>{gates.join(' · ')}</div>
+                  <div style={{ font: '400 11px/1.5 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginTop: 6 }}>Any single failed gate zeroes the incentive, regardless of performance elsewhere.</div>
+                </div>
+              </Card>
+            ) : null}
             <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
               <div style={{ padding: '14px 16px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="target" size={18} style={{ color: 'var(--sd-primary)' }} />
-                <div style={{ font: '700 15px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', flex: 1 }}>HITs credited this cycle</div>
-                <span style={{ font: '600 12px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{m.mmHits} hits</span>
+                <div style={{ font: '700 15px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', flex: 1 }}>HIT2 conversions credited</div>
+                <span style={{ font: '600 12px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{m.mmHits} converted</span>
               </div>
               {rows.length === 0 ? (
-                <div style={{ padding: '4px 16px 20px', font: '500 13px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>No handover-TRUE hits logged in this cycle.</div>
+                <div style={{ padding: '4px 16px 20px', font: '500 13px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>No HIT2 conversions credited this month.</div>
               ) : (
                 <div>
                   <div style={{ display: 'grid', gridTemplateColumns: '0.5fr 1fr 2.6fr', gap: 8, padding: '8px 16px', background: 'var(--sd-bg-app)', font: '600 10px/1 var(--sd-font-sans)', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sd-fg-2)' }}>
-                    <span>#</span><span>HIT date</span><span>Seller</span>
+                    <span>#</span><span>Month</span><span>Seller</span>
                   </div>
                   {rows.map((s, i) => (
                     <div key={i} style={{ display: 'grid', gridTemplateColumns: '0.5fr 1fr 2.6fr', gap: 8, padding: '9px 16px', borderTop: '1px solid var(--sd-stroke)', alignItems: 'center' }}>
@@ -386,7 +411,7 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <MetricTile label="HITs" value={m.mmHits} sub="Handover = TRUE" icon="target" accent="var(--sd-primary)" />
+              <MetricTile label="HIT2" value={m.mmHits} sub="Converted this month" icon="target" accent="var(--sd-primary)" />
               <MetricTile label="Target" value={hasTgt ? m.mmTarget : '—'} sub="This cycle" icon="gauge" accent="var(--sd-fg-2)" />
               <MetricTile label="Achievement" value={m.achievementPct == null ? '—' : I.pct(m.achievementPct, 0)} sub={band ? band.label : '—'} icon="chart-line-up" accent={(m.achievementPct || 0) >= 100 ? 'var(--sd-green-700)' : 'var(--sd-fg-2)'} />
               <MetricTile label="Pool unlocked" value={band ? band.pct + '%' : '—'} sub="Before multipliers" icon="wallet" accent="var(--sd-primary)" />
@@ -407,21 +432,29 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
                 })}
               </div>
             </Card>
-            <Card variant="regular" padding={18} style={{ background: 'var(--sd-bg-app)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <Icon name="clock" size={16} style={{ color: 'var(--sd-fg-3)' }} />
-                <div style={{ font: '700 13px/1 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>Multipliers not yet live</div>
-              </div>
-              <div style={{ font: '400 12px/1.5 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginBottom: 10 }}>The figure above is the unlocked pool only. These still need data sources:</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {PENDING.map((r) => (
-                  <div key={r[0]} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                    <span style={{ flex: '0 0 128px', font: '600 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{r[0]}</span>
-                    <span style={{ flex: 1, font: '400 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>{r[1]}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
+            {m.mmHasInputs ? (
+              <Card variant="regular" padding={18}>
+                <div style={{ font: '700 14px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', marginBottom: 12 }}>Inputs behind the gates</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {[
+                    ['ARR achieved', m.mmArrAch == null ? '—' : I.inr(Math.round(m.mmArrAch))],
+                    ['ARR target (earned)', m.mmArrTarget == null ? '—' : I.inr(Math.round(m.mmArrTarget))],
+                    ['Assigned sellers', m.mmAssigned == null ? '—' : m.mmAssigned],
+                    ['Google-live sellers', m.mmGlive == null ? '—' : m.mmGlive],
+                    ['Churned sellers', m.mmChurn || 0],
+                    ['Settled days averaged', m.mmDays == null ? '—' : m.mmDays],
+                  ].map((r) => (
+                    <div key={r[0]} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
+                      <span style={{ font: '400 12px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>{r[0]}</span>
+                      <span className="sd-num" style={{ font: '600 12px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-1)' }}>{r[1]}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ font: '400 11px/1.5 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--sd-stroke)' }}>
+                  ARR target is <b>earned</b> — each seller carries a per-age target (M0 ₹1,859 → M5 ₹4,647), capped at M5. Spend/Live is a day-wise weighted average over the cycle; go-live is frozen at the 19th.
+                </div>
+              </Card>
+            ) : null}
           </div>
         </div>
       </div>
