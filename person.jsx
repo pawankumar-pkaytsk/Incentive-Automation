@@ -105,7 +105,14 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
                 {gm.is1k5k ? <MathRow label="1k–5k GL kicker" detail={gm.kickerNote} value="pending" accent="var(--sd-orange-700)" indent /> : null}
               </div>
               <div style={{ padding: '4px 16px 16px' }}>
-                <MathRow strong label={`Final incentive · ${I.PERIOD}`} detail={gm.fixedPct != null ? 'Fixed incentive — overrides the computed figure' : (gm.outputPct == null ? 'GM target missing' : `Output ${I.pct(gm.outputPct, 2)} × ${gm.opsMult.toFixed(2)}`)} value={gm.finalPct == null ? 'Pending' : I.pct(gm.finalPct, 2)} />
+                {gm.kickerPct ? (
+                  <MathRow label="GL kicker" detail={gm.kickerNote + ' · ' + (gm.kickerRows || []).map((r) => r.name + ' ' + I.pct(r.pct, 2)).join(' · ')} value={'+' + I.pct(gm.kickerPct, 2)} accent="var(--sd-green-700)" indent />
+                ) : null}
+                <MathRow strong label={`Final incentive · ${I.PERIOD}`}
+                  detail={gm.fixedPct != null ? 'Fixed incentive — overrides the computed figure'
+                    : (gm.outputPct == null ? 'GM target missing'
+                      : `Output ${I.pct(gm.outputPct, 2)} × ${gm.opsMult.toFixed(2)}` + (gm.kickerPct ? ` + ${I.pct(gm.kickerPct, 2)} GL kicker` : ''))}
+                  value={gm.finalPct == null ? 'Pending' : I.pct(gm.finalPct, 2)} />
               </div>
             </Card>
             <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>

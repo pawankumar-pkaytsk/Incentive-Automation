@@ -207,7 +207,14 @@
       mmPeriods[who.email] = mmPeriods[who.email] || {};
       return who;
     };
-    row('mmmap').forEach((mp) => { const nm = String(mp.gl || '').trim(); if (!nm) return; const who = mkMM(nm, mp.glEmail); MONTHS.forEach((m) => { mmPeriods[who.email][m.key] = true; }); });
+    const gmGLs = {};   // GM email → their 1k-5k GLs (for the GL kicker on the GM incentive)
+    row('mmmap').forEach((mp) => {
+      const nm = String(mp.gl || '').trim(); if (!nm) return;
+      const who = mkMM(nm, mp.glEmail);
+      MONTHS.forEach((m) => { mmPeriods[who.email][m.key] = true; });
+      const gmP = resolvePerson(mp.gmEmail, mp.gm);
+      if (gmP) (gmGLs[gmP.email] || (gmGLs[gmP.email] = [])).push(who);
+    });
     // 1k-5k targets (card 11322, Role='1K-5K') keyed by person|month|year.
     const mmTargets = {};
     row('mmtargets').forEach((t) => {
@@ -330,7 +337,8 @@
       if (p.logic === 'midmarket') {
         const hv = mmHitsByPM[p.email + '|' + m.key] || { count: 0, rows: [] };
         const tgt = mmTargets[p.email + '|' + m.month + '|' + m.year];
-        const hasTgt = tgt != null && tgt > 0;
+        const hasRow = tgt != null;              // a target row exists for this period
+        const hasTgt = hasRow && tgt > 0;        // …and it's a real (non-zero) target
         const ach = hasTgt ? (hv.count / tgt) * 100 : null;
         const band = ach == null ? null : mmBandOf(ach);
         const base = band ? band.pct : 0;
@@ -348,7 +356,7 @@
         const goliveMult = (golive != null && golive > 65) ? 1.25 : 1.0;
         // Hard gates — any failure zeroes the whole incentive
         const gates = [];
-        if (base === 0) gates.push('HIT2 pool 0%');
+        if (base === 0) gates.push(!hasRow ? 'No HIT2 target set' : (tgt === 0 ? 'HIT2 target is 0' : 'HIT2 pool 0%'));
         if (arrPct == null || arrPct < 85) gates.push('ARR < 85%');
         if (churnMult === 0) gates.push(churn + ' churns');
         if (metaSL == null || metaSL < 60) gates.push('Meta S/L < 60%');
@@ -361,12 +369,13 @@
           mmMetaSL: metaSL, mmGoogleSL: googleSL, mmGolive: golive, mmChurn: churn,
           mmMetaMult: metaMult, mmGoogMult: googMult, mmGoliveMult: goliveMult, mmChurnMult: churnMult,
           mmAssigned: gi ? gi.assigned : null, mmGlive: gi ? gi.glive : null, mmDays: gi ? gi.days : null,
-          mmGates: gates, mmHasInputs: !!gi,
+          mmGates: gates, mmHasInputs: !!gi, mmHasTargetRow: hasRow, mmZeroTarget: hasRow && tgt === 0,
           mmDet: gi ? (gi.det || []) : [], mmChurnDet: gi ? (gi.churnDet || []) : [], mmGoliveDet: gi ? (gi.goliveDet || []) : [],
           mmCycle: mi ? mi.cycle : null,
           adhocPct: 0, adhocAbs: 0, adhocNote: '',
-          dataHealth: !gi ? 'missing' : 'ok',
-          missingFields: !gi ? ['No computed 1k-5k inputs for ' + m.label + ' — run midmarket_incentive_refresh.py'] : [] });
+          dataHealth: !gi ? 'missing' : (!hasRow ? 'attention' : 'ok'),
+          missingFields: !gi ? ['No computed 1k-5k inputs for ' + m.label + ' — run midmarket_incentive_refresh.py']
+            : (!hasRow ? ['No 1k-5k HITS target row for ' + m.label + ' in card 11322'] : []) });
         return;
       }
       if (p.logic === 'campaign') {
@@ -437,16 +446,22 @@
         const achievementPct = tgt > 0 ? (weighted / tgt) * 100 : null;
         const output = tgt > 0 ? (weighted / tgt) * 25 : null;          // (HITs ÷ Target) × 25%
         const ops = gmOpsMult(gcs, m.key);
-        // Per-person fixed override (e.g. WM363 is always 15%) wins over the computed figure.
+        // GL kicker — the GM earns 1/5 of each reporting 1k-5k GL's incentive, added on top.
+        const myGLs = gmGLs[gm.email] || [];
+        const kickerRows = myGLs.map((g) => { const r = g.byMonth[m.key] || {}; return { name: g.name, pct: r.finalPct == null ? 0 : r.finalPct }; });
+        const kicker = +kickerRows.reduce((s, r) => s + r.pct / 5, 0).toFixed(2);
+        const computed = output == null ? null : output * ops.mult;
+        // Per-person fixed override (e.g. WM363 is always 15%) wins over everything, kicker included.
         const fixed = FIXED_PCT[gm.empId];
-        const finalPct = fixed != null ? fixed : (output == null ? null : output * ops.mult);
+        const finalPct = fixed != null ? fixed : (computed == null ? (kicker ? kicker : null) : +(computed + kicker).toFixed(2));
         gm.byMonth[m.key].gm = {
           weightedHits: weighted, rawHits: raw, threeWeekCounted: threeWk, counted: hits,
           target: tgt, achievementPct, outputPct: output,
           opsMult: ops.mult, opsRule: ops.rule, opsGreen: ops.g, opsYellow: ops.y, opsRed: ops.r,
-          finalPct, teamSize: gcs.length,
+          finalPct, baseFinalPct: computed, teamSize: gcs.length,
           fixedPct: fixed != null ? fixed : null,
-          is1k5k, kickerPct: 0, kickerNote: is1k5k ? 'GL kicker (1/5 of GL incentive) pending GL logic' : '',
+          is1k5k: myGLs.length > 0, kickerPct: kicker, kickerRows: kickerRows,
+          kickerNote: myGLs.length ? '1/5 of ' + myGLs.length + ' 1k-5k GL incentive' + (myGLs.length === 1 ? '' : 's') : '',
           dataHealth: fixed != null ? 'ok' : (tgt === 0 ? 'missing' : 'ok'),
         };
       });

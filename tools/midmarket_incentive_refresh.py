@@ -119,6 +119,17 @@ def main():
               if (str(r.get('team')).upper() == 'HITS' or str(r.get('hit2')) == '1')
               and not isgood(r) and (hm(r) or 0) >= 202510]
 
+    cohort_ids = {str(r['seller_id']) for r in cohort}
+
+    def convfriday(r):
+        """Conversion Friday from hit2_year_week (earliest = a seller graduates once)."""
+        if str(r.get('hit2')) != '1': return None
+        yw = str(r.get('hit2_year_week') or '')
+        try:
+            y, w = int(yw[:4]), int(yw[-2:])
+            return datetime.date.fromisocalendar(y, w, 5)
+        except (ValueError, TypeError): return None
+
     def convmonth(r):
         if str(r.get('hit2')) != '1': return None
         yw = str(r.get('hit2_year_week') or '')
@@ -140,8 +151,9 @@ def main():
         so = float(d.get('spend_overall') or 0)
         daytot[dt] += so
         sid = str(d['seller_id'])
-        if sid in assigned:
-            byseller[sid][dt] = (float(d.get('spend_meta') or 0), float(d.get('spend_google') or 0), so)
+        if sid in assigned or sid in cohort_ids:
+            byseller[sid][dt] = (float(d.get('spend_meta') or 0), float(d.get('spend_google') or 0), so,
+                                 float(d.get('arr_overall') or 0))
 
     today = datetime.date.today()
     months = []
@@ -168,7 +180,7 @@ def main():
         cumg = collections.Counter(); lastspend = {}
         cumall = collections.Counter()
         for sid, mp in byseller.items():
-            for dt, (sm, sg, so) in mp.items():
+            for dt, (sm, sg, so, _ar) in mp.items():
                 if dt <= eiso:
                     cumg[sid] += sg; cumall[sid] += so
                     if so > 0 and (sid not in lastspend or dt > lastspend[sid]): lastspend[sid] = dt
@@ -189,7 +201,7 @@ def main():
             md = gd = 0
             mp = byseller.get(sid, {})
             for dt in days:
-                sm, sg, so = mp.get(dt, (0, 0, 0))
+                sm, sg, so, _ar = mp.get(dt, (0, 0, 0, 0))
                 if sm > 0: md += 1
                 if glive and sg > 0: gd += 1
             p['mdays'] += md; p['gdays'] += gd
@@ -216,7 +228,18 @@ def main():
             frozen = (cm == ym)
             age = mdiff(h1, cm if frozen else ym)
             p = per[gl]
-            t_ = TARGET[min(max(age, 0), 5)]; a_ = alut.get((sid, ym), 0.0)
+            t_ = TARGET[min(max(age, 0), 5)]
+            if frozen:
+                # Frozen ARR = latest daily arr_overall (card 10469) on or before conversion Friday.
+                fri = convfriday(r)
+                a_ = 0.0
+                if fri:
+                    mp_ = byseller.get(sid, {})
+                    ds = [d0 for d0 in mp_ if d0 <= fri.isoformat()]
+                    if ds: a_ = mp_[max(ds)][3]
+                if not a_: a_ = alut.get((sid, ym), 0.0)      # fall back to the month's ARR
+            else:
+                a_ = alut.get((sid, ym), 0.0)
             p['arrTarget'] += t_; p['arrAch'] += a_; p['sellers'] += 1
             if frozen: p['frozen'] += 1
             d = p['det'].setdefault(sid, {'sid': sid, 'n': names.get(sid, sid), 'md': 0, 'gd': 0, 'live': 0})
