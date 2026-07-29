@@ -433,7 +433,16 @@
   }
 
   /* ---- Aggregations -------------------------------------------------- */
-  function teamMembers(key) { return people.filter((p) => p.team === key); }
+  function teamMembers(key) {
+    return people.filter((p) => {
+      if (p.team !== key) return false;
+      // 1k-5k membership is per-period: card-12100 GLs count in every period, and a GL who has
+      // since left counts only in the months they had a target. (p.mmPeriods is set by the live
+      // path; sample data has none, so it falls through and always shows.)
+      if (key === 'midmarket' && p.mmPeriods) return !!p.mmPeriods[activeKey];
+      return true;
+    });
+  }
   function avgFinalPct(list) {
     const c = list.filter((p) => finalPctWithAdhoc(p) != null);
     return c.length ? c.reduce((s, p) => s + finalPctWithAdhoc(p), 0) / c.length : 0;

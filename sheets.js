@@ -183,19 +183,31 @@
     });
     // 1k-5k GLs are DEFINED by card 12100 — force onto the midmarket team; synthesize any
     // missing from the People sheet so every GL shows. mmPersonByName maps GL name → person.
-    const mmSet = {}, mmPersonByName = {};
-    row('mmmap').forEach((mp) => {
-      const nm = String(mp.gl || '').trim(); if (!nm) return;
-      const k = campNorm(nm); if (mmPersonByName[k]) return;
-      let who = resolvePerson(mp.glEmail, nm);
+    // Membership is PER-PERIOD: card 12100 (current rolling roster) counts for every period,
+    // and anyone with a 1k-5k target for a given month counts for that month only — so a GL who
+    // has since left (e.g. a June target but absent from the card) still shows in June, not July.
+    const mmSet = {}, mmPersonByName = {}, mmPeriods = {};
+    const mkMM = (nm, email) => {
+      const k = campNorm(nm);
+      if (mmPersonByName[k]) return mmPersonByName[k];
+      let who = resolvePerson(email, nm);
       if (!who) { who = { empId: '', name: nm, email: 'midmarket|' + k, managerEmail: '', teamRaw: '1k-5k', designation: '1k-5k GL', byMonth: {}, reports: [], synthetic: true }; people.push(who); byEmail[who.email] = who; }
       mmSet[who.email] = true; mmPersonByName[k] = who;
-    });
+      mmPeriods[who.email] = mmPeriods[who.email] || {};
+      return who;
+    };
+    row('mmmap').forEach((mp) => { const nm = String(mp.gl || '').trim(); if (!nm) return; const who = mkMM(nm, mp.glEmail); MONTHS.forEach((m) => { mmPeriods[who.email][m.key] = true; }); });
     // 1k-5k targets (card 11322, Role='1K-5K') keyed by person|month|year.
     const mmTargets = {};
-    row('mmtargets').forEach((t) => { const who = resolve(t.name); if (!who) return; mmTargets[who.email + '|' + t.month + '|' + t.year] = Number(t.target) || 0; });
+    row('mmtargets').forEach((t) => {
+      const nm = String(t.name || '').trim(); if (!nm) return;
+      const who = mkMM(nm, '');
+      mmPeriods[who.email][t.year + '-' + String(t.month).padStart(2, '0')] = true;
+      mmTargets[who.email + '|' + t.month + '|' + t.year] = Number(t.target) || 0;
+    });
     people.forEach((p) => {
       p.team = gmSet[p.email] ? 'gm' : (revivalGCs[p.email] ? 'revival' : (campaignSet[p.email] ? 'campaign' : (mmSet[p.email] ? 'midmarket' : classify(p))));
+      if (mmSet[p.email]) p.mmPeriods = mmPeriods[p.email] || {};
       p.logic = logicFor(p.team);
       p.role = ADMINS.includes(p.email) ? 'admin' : ((gmSet[p.email] || p.reports.length) ? 'manager' : 'gc');
     });
