@@ -73,7 +73,11 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
   /* ---------- GM incentive (doc §3) ---------- */
   if (isGM) {
     const gm = m.gm || { weightedHits: 0, rawHits: 0, threeWeekCounted: [], counted: [], target: 0, achievementPct: null, outputPct: null, opsMult: 1, opsRule: '—', opsGreen: 0, opsYellow: 0, opsRed: 0, finalPct: null, teamSize: 0, is1k5k: false, kickerNote: '' };
-    const gcs = (person.reports || []).filter((d) => d.role === 'gc');
+    // Reporting GCs come from card 12101 (same list the ops multiplier uses). Fall back to the
+    // roster hierarchy for the seeded sample data, which has no card mapping.
+    const gcs = (m.gm && m.gm.gcEmails && m.gm.gcEmails.length)
+      ? m.gm.gcEmails.map((e) => I.byEmail[e]).filter(Boolean)
+      : (person.reports || []).filter((d) => d.role === 'gc');
     const sellersPayload = {
       title: 'HITs counted for this GM', subtitle: person.name + ' · ' + m.label, icon: 'list-checks',
       filename: 'gm_hits_' + m.key, formula: 'Weighted HITs = Σ (3-week ×1.5, standard ×1) where handover = TRUE (handover col F = GM)',
@@ -102,11 +106,11 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
                 <MathRow label="GM target" detail="From target sheet (month-wise)" value={gm.target || '—'} />
                 <MathRow label="GM output" detail={`(${gm.weightedHits.toFixed(1)} ÷ ${gm.target || '—'}) × 25%`} value={gm.outputPct == null ? '—' : I.pct(gm.outputPct, 2)} accent="var(--sd-primary)" />
                 <MathRow label={`GC Ops multiplier — ${gm.opsRule}`} detail={`Reporting GCs · ${gm.opsGreen} green · ${gm.opsYellow} yellow · ${gm.opsRed} red`} value={'×' + gm.opsMult.toFixed(2)} accent={opsColor} indent />
-                {gm.is1k5k ? <MathRow label="1k–5k GL kicker" detail={gm.kickerNote} value="pending" accent="var(--sd-orange-700)" indent /> : null}
               </div>
               <div style={{ padding: '4px 16px 16px' }}>
-                {gm.kickerPct ? (
-                  <MathRow label="GL kicker" detail={gm.kickerNote + ' · ' + (gm.kickerRows || []).map((r) => r.name + ' ' + I.pct(r.pct, 2)).join(' · ')} value={'+' + I.pct(gm.kickerPct, 2)} accent="var(--sd-green-700)" indent />
+                {gm.is1k5k ? (
+                  <MathRow label="1k–5k GL kicker" detail={gm.kickerNote + ((gm.kickerRows || []).length ? ' · ' + gm.kickerRows.map((r) => r.name + ' ' + I.pct(r.pct, 2)).join(' · ') : '')}
+                    value={'+' + I.pct(gm.kickerPct || 0, 2)} accent={gm.kickerPct ? 'var(--sd-green-700)' : 'var(--sd-fg-3)'} indent />
                 ) : null}
                 <MathRow strong label={`Final incentive · ${I.PERIOD}`}
                   detail={gm.fixedPct != null ? 'Fixed incentive — overrides the computed figure'
@@ -160,7 +164,7 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
                   );
                 })}
               </div>
-              {gm.is1k5k ? <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 'var(--sd-radius-md)', background: 'var(--sd-orange-50)', font: '500 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-orange-900)' }}><Icon name="info" size={13} style={{ marginRight: 5, verticalAlign: '-2px' }} />1k–5k GM: GL kicker (1/5 of GL incentive) will be added once the GL incentive logic is defined.</div> : null}
+              {gm.is1k5k ? <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 'var(--sd-radius-md)', background: 'var(--sd-accent-1)', font: '500 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-1)' }}><Icon name="info" size={13} style={{ marginRight: 5, verticalAlign: '-2px' }} />GL kicker: this GM earns 1/5 of each reporting 1k–5k GL's incentive, added on top.</div> : null}
             </Card>
           </div>
         </div>

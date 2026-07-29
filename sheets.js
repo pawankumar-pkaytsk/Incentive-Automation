@@ -459,6 +459,7 @@
           target: tgt, achievementPct, outputPct: output,
           opsMult: ops.mult, opsRule: ops.rule, opsGreen: ops.g, opsYellow: ops.y, opsRed: ops.r,
           finalPct, baseFinalPct: computed, teamSize: gcs.length,
+          gcEmails: gcs.map((g) => g.email),   // reporting GCs from card 12101 (not the roster hierarchy)
           fixedPct: fixed != null ? fixed : null,
           is1k5k: myGLs.length > 0, kickerPct: kicker, kickerRows: kickerRows,
           kickerNote: myGLs.length ? '1/5 of ' + myGLs.length + ' 1k-5k GL incentive' + (myGLs.length === 1 ? '' : 's') : '',
