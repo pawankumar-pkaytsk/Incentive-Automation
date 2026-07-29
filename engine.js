@@ -101,6 +101,7 @@
     if (p.team === 'kae') return 'kae';
     if (p.team === 'revival') return 'revival';
     if (p.team === 'campaign') return 'campaign';
+    if (p.team === 'midmarket') return 'midmarket';
     return 'core';
   }
 
@@ -151,6 +152,7 @@
     if (logic === 'kae') return computeKaeMonth(p, raw);
     if (logic === 'revival') return computeRevivalMonth(p, raw);
     if (logic === 'campaign') return computeCampaignMonth(p, raw);
+    if (logic === 'midmarket') return computeMidmarketMonth(p, raw);
     if (logic === 'core') {
       const rng = rngFor(p.empId + '|inp|' + raw.key);
       // WES sample: social-media, SOS, internal escalation counts (deduped per seller/day upstream)
@@ -287,6 +289,37 @@
       campaignSpendGmv: sg, campaignBaseline: 42,
       adhocPct: 0, adhocAbs: 0, adhocNote: '',
       dataHealth: 'ok', missingFields: [],
+    };
+  }
+
+  // HITS 1k-5k — HITs achievement unlocks the pool: ≥100% → 25%, 50–99% → 15%, <50% → 0%.
+  // (ARR/churn/spend-live/go-live/NPS multipliers pending their data sources.)
+  const MM_BANDS = [
+    { min: 100, pct: 25, label: '≥ 100% of target' },
+    { min: 50,  pct: 15, label: '50–99% of target' },
+    { min: 0,   pct: 0,  label: '< 50% of target' },
+  ];
+  function mmBand(ach) { return MM_BANDS.find((b) => ach >= b.min) || MM_BANDS[MM_BANDS.length - 1]; }
+  function computeMidmarketMonth(p, raw) {
+    const rng = rngFor(p.empId + '|mm|' + raw.key);
+    const target = Math.max(1, Math.round(between(rng(), 1, 3)));
+    const hits = Math.round(between(rng(), 0, 4));
+    const rows = [];
+    for (let i = 0; i < hits; i++) rows.push({ date: new Date(raw.year, raw.month - 1, 20 + Math.floor(rng() * 29)).toISOString().slice(0, 10), seller: 'Sample Seller ' + (i + 1), sid: 'S' + (2000 + i), gl: p.name });
+    rows.sort((a, b) => a.date < b.date ? -1 : 1);
+    const ach = (hits / target) * 100;
+    const band = mmBand(ach);
+    return {
+      ...raw, logic: 'midmarket',
+      counted: [], disposed: [], threeWeekCounted: [], weightedHits: hits, rawHits: hits, achievementPct: ach,
+      rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null,
+      coreBand: null, perHitRate: null, outputPct: band.pct, finalPct: band.pct,
+      spend: null, task: null, callback: null, escalations: null,
+      // 1k-5k specific
+      mmHits: hits, mmRows: rows, mmBand: band, mmTarget: target, mmPending: true,
+      target: target,
+      adhocPct: 0, adhocAbs: 0, adhocNote: '',
+      dataHealth: 'attention', missingFields: ['ARR / churn / Spend-Live / go-live / NPS multipliers pending — showing unlocked pool only'],
     };
   }
 

@@ -25,7 +25,7 @@ const PersonHeader = ({ person, viewer }) => {
           <Badge tone="primary" style={{ background: team.tint, color: team.accent }}><Icon name={team.icon} size={13} /> {team.name}</Badge>
           <span style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.designation}</span>
           <span style={{ font: '400 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>· {person.empId}</span>
-          <Badge tone={person.logic === 'hypercare' ? 'info' : 'primary'} dot>{person.logic === 'hypercare' ? 'Hypercare logic' : person.logic === 'kae' ? 'KAE logic' : person.logic === 'revival' ? 'Revival logic' : person.logic === 'campaign' ? 'Campaign logic' : isGM ? 'GM rollup' : 'Core GC logic'}</Badge>
+          <Badge tone={person.logic === 'hypercare' ? 'info' : 'primary'} dot>{person.logic === 'hypercare' ? 'Hypercare logic' : person.logic === 'kae' ? 'KAE logic' : person.logic === 'revival' ? 'Revival logic' : person.logic === 'campaign' ? 'Campaign logic' : person.logic === 'midmarket' ? '1k-5k logic' : isGM ? 'GM rollup' : 'Core GC logic'}</Badge>
         </div>
       </div>
       <div style={{ textAlign: 'right', minWidth: 160 }}>
@@ -320,6 +320,106 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
                     </div>
                   );
                 })}
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ---------- HITS 1k-5k GL (HITs unlocks the pool; multipliers pending) ---------- */
+  if (person.logic === 'midmarket') {
+    const band = m.mmBand, rows = m.mmRows || [], hasTgt = m.mmTarget != null;
+    const PENDING = [
+      ['ARR', 'Qualifier ≥85% of ARR target · 1.5×→1.25×, 2×→2×'],
+      ['Churn', '1 churn → 0.5× · 2 churns → 0'],
+      ['Spend / Live — Meta', '<60% → 0 · 60–80% → 1× · >80% → 1.25×'],
+      ['Spend / Live — Google', '<65% → 0 · 65–75% → 1× · >75% → 1.2×'],
+      ['Google go-lives', '<50% → 0 · 50–65% → 1× · >65% → 1.25×'],
+      ['NPS', 'Bands not yet defined'],
+    ];
+    return (
+      <div style={{ animation: 'fadeUp 360ms ease both' }}>
+        {onBack ? <BackBtn onBack={onBack} /> : null}
+        <PersonHeader person={person} viewer={viewer} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(0,1fr)', gap: 20, alignItems: 'start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '16px 16px 4px' }}><SectionTitle eyebrow="Full transparency · 1k-5k GL" title={`How your ${I.PERIOD} incentive is calculated`} /></div>
+              {hasTgt ? (
+                <div style={{ padding: '0 16px 10px' }}>
+                  <MathRow label="HITs achieved (20th→19th)" detail="Handover = TRUE in the HITS-2 handover sheet" value={String(m.mmHits)} />
+                  <MathRow label="HITS target" detail="From the HITS target sheet" value={String(m.mmTarget)} indent />
+                  <MathRow label="Achievement" detail={band ? band.label : '—'} value={m.achievementPct == null ? '—' : I.pct(m.achievementPct, 0)} accent={(m.achievementPct || 0) >= 100 ? 'var(--sd-green-700)' : (m.achievementPct || 0) >= 50 ? 'var(--sd-heading)' : 'var(--sd-red-700)'} indent />
+                </div>
+              ) : <div style={{ padding: '4px 16px 14px', font: '500 13px/1.5 var(--sd-font-sans)', color: 'var(--sd-red-700)' }}>No 1k-5k HITS target set for {m.label} — incentive can't be computed.</div>}
+              {hasTgt ? (
+                <div style={{ padding: '4px 16px 16px' }}>
+                  <MathRow strong label="Incentive pool unlocked" detail={band ? band.label + ' → ' + band.pct + '% of the incentive' : '—'} value={band ? band.pct + '%' : '—'} />
+                </div>
+              ) : null}
+            </Card>
+            <Card padding={0} variant="regular" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '14px 16px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="target" size={18} style={{ color: 'var(--sd-primary)' }} />
+                <div style={{ font: '700 15px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', flex: 1 }}>HITs credited this cycle</div>
+                <span style={{ font: '600 12px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{m.mmHits} hits</span>
+              </div>
+              {rows.length === 0 ? (
+                <div style={{ padding: '4px 16px 20px', font: '500 13px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>No handover-TRUE hits logged in this cycle.</div>
+              ) : (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '0.5fr 1fr 2.6fr', gap: 8, padding: '8px 16px', background: 'var(--sd-bg-app)', font: '600 10px/1 var(--sd-font-sans)', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sd-fg-2)' }}>
+                    <span>#</span><span>HIT date</span><span>Seller</span>
+                  </div>
+                  {rows.map((s, i) => (
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '0.5fr 1fr 2.6fr', gap: 8, padding: '9px 16px', borderTop: '1px solid var(--sd-stroke)', alignItems: 'center' }}>
+                      <span className="sd-num" style={{ font: '700 12px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}>{i + 1}</span>
+                      <span className="sd-num" style={{ font: '500 12px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{s.date}</span>
+                      <span style={{ font: '500 12px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.seller || s.sid}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <MetricTile label="HITs" value={m.mmHits} sub="Handover = TRUE" icon="target" accent="var(--sd-primary)" />
+              <MetricTile label="Target" value={hasTgt ? m.mmTarget : '—'} sub="This cycle" icon="gauge" accent="var(--sd-fg-2)" />
+              <MetricTile label="Achievement" value={m.achievementPct == null ? '—' : I.pct(m.achievementPct, 0)} sub={band ? band.label : '—'} icon="chart-line-up" accent={(m.achievementPct || 0) >= 100 ? 'var(--sd-green-700)' : 'var(--sd-fg-2)'} />
+              <MetricTile label="Pool unlocked" value={band ? band.pct + '%' : '—'} sub="Before multipliers" icon="wallet" accent="var(--sd-primary)" />
+            </div>
+            <Card variant="regular" padding={18}>
+              <div style={{ font: '700 14px/1 var(--sd-font-sans)', color: 'var(--sd-heading)', marginBottom: 12 }}>HITs → incentive unlocked</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {[['≥ 100%', '25%', 100, Infinity], ['50–99%', '15%', 50, 99.999], ['< 50%', '0%', -Infinity, 49.999]].map((r) => {
+                  const a = m.achievementPct;
+                  const active = a != null && a >= r[2] && a <= r[3];
+                  return (
+                    <div key={r[0]} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 'var(--sd-radius-md)', background: active ? 'var(--sd-accent-1)' : 'transparent', border: active ? '1px solid var(--sd-primary)' : '1px solid var(--sd-stroke)' }}>
+                      <span style={{ flex: '0 0 62px', font: '700 12px/1 var(--sd-font-sans)', color: active ? 'var(--sd-primary)' : 'var(--sd-fg-2)' }}>{r[0]}</span>
+                      <span className="sd-num" style={{ flex: 1, font: '600 13px/1 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>{r[1]} of incentive</span>
+                      {active ? <Icon name="check" size={14} style={{ color: 'var(--sd-primary)' }} /> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+            <Card variant="regular" padding={18} style={{ background: 'var(--sd-bg-app)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <Icon name="clock" size={16} style={{ color: 'var(--sd-fg-3)' }} />
+                <div style={{ font: '700 13px/1 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>Multipliers not yet live</div>
+              </div>
+              <div style={{ font: '400 12px/1.5 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginBottom: 10 }}>The figure above is the unlocked pool only. These still need data sources:</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {PENDING.map((r) => (
+                  <div key={r[0]} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                    <span style={{ flex: '0 0 128px', font: '600 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{r[0]}</span>
+                    <span style={{ flex: 1, font: '400 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>{r[1]}</span>
+                  </div>
+                ))}
               </div>
             </Card>
           </div>

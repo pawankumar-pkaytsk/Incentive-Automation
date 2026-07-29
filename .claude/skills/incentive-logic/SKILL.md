@@ -34,6 +34,12 @@ Bucketed per GC per pay-period window (**20th→20th**, `WINDOW_START_DAY=20`). 
 ## WES (Input D)
 `WES = social×3 + sos×1.5 + internal×1`, de-duped by seller/day/type. From the `sos` sheet.
 
+## midmarket (HITS 1k-5k) logic — PARTIAL
+Only the **HITs output tier** is implemented so far: achievement = HITs ÷ target on the **20th→19th** cycle → `≥100% → 25%` · `50–99% → 15%` · `<50% → 0%` (`MM_BANDS`/`mmBandOf`). Stored as `outputPct` and (for now) `finalPct`.
+- **HITs** come from the **HITS-2 handover Google Sheet** (`SHEETS.hits2`, file `198xsGns4LC-80BqAoOdv_Aup29udacaam8WB7jOZalA`, tab `HITS 2 Handover`) — a row counts only when **handover status (col I) = TRUE**, attributed to the **GL Name (col E)**. Note: card 10992's changelog was evaluated for this and rejected — it only emits GC/GM/KAM roles and reproduced just 45% of the sheet's GLs.
+- **GL roster** = card **12100** and **targets** = card **11322** (`Role='1K-5K'`), both snapshotted to `midmarket_data.json`. GLs missing from the People sheet are synthesized so they still appear.
+- **NOT yet implemented** (data sources pending): ARR qualifier (≥85%) + multiplier (1.5×→1.25×, 2×→2×), churn (1→0.5×, 2→0), Spend/Live Meta (<60%→0, 60–80%→1×, >80%→1.25×) with its Task>90% & TS=100% qualifier, Spend/Live Google (<65%→0, 65–75%→1×, >75%→1.2×), Google go-lives (<50%→0, 50–65%→1×, >65%→1.25×), and NPS (bands undefined). The PersonView shows these in a "Multipliers not yet live" panel and `dataHealth` is set to `attention`.
+
 ## campaign logic
 Linear **inverse** incentive on Spend/GMV: `Incentive% = 25% × (baseline ÷ Spend/GMV%)`, baseline = 42%. At 42% → 25%; below → higher; above → lower. Lower Spend/GMV is better. Code: `CAMPAIGN_BASELINE`/`CAMPAIGN_W0`/`campaignIncentive` + the `campaign` branch in `computeAll` (sheets.js) and `computeCampaignMonth` (engine.js). **HARD-CODED** for Jun-2026 (`CAMPAIGN_KEY='2026-06'`, week-0 Spend/GMV per GC in `CAMPAIGN_W0`); the 4 GCs are force-synthesized onto the campaign team. **TODO Jul onward:** replace `CAMPAIGN_W0` with a rolling Metabase query + POC mapping (snapshot it in `incentive_task_refresh.py` like the others). Result is stored as `finalPct` (a %). Other periods show pending until the query is wired.
 

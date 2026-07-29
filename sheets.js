@@ -21,6 +21,8 @@
     spend:      { id: '1wwfbMVkMKq80Znq1mkpO-NCLI-fc7d2hPIepCp04bQ0', tab: 'spendinputs',col: { date: 0, gcName: 1, live: 5, spend: 7 } },
     // NOTE: task/callback data no longer comes from a Google Sheet. It is pulled from
     // Metabase card 10181 by incentive_task_refresh.py and served as task_data.json (see below).
+    // HITS-2 handover log → 1k-5k GL hits attribution (a hit counts when handover = TRUE).
+    hits2:      { id: '198xsGns4LC-80BqAoOdv_Aup29udacaam8WB7jOZalA', tab: 'HITS 2 Handover', col: { hitDate: 1, sellerId: 2, sellerName: 3, glName: 4, gmName: 5, handover: 8, googleHandover: 12 } },
     sos:        { id: '1SIww2UQnmcVs6lgLGYMxGLcxdCVf3MYkPZk7BfY3hIU', tab: 'sos',        col: { type: 0, sellerId: 1, date: 2, context: 3, gcName: 4, gmName: 5 } },
     strikes:    { id: '16JUSC2vOsG6SvN1-RhnFWZ5fdIrF1SyAYo_EiGbckkE', tab: 'Strikes_Log',col: { date: 1, kaeName: 2, kaeEmpId: 3, issue: 6 } },
   };
@@ -49,8 +51,9 @@
   function fmtDate(d) { return d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') : ''; }
   function monthNum(v) { if (typeof v === 'number') return v; const s = String(v).trim(); if (/^\d+$/.test(s)) return +s; const i = MN.findIndex((n) => s.toLowerCase().startsWith(n.toLowerCase())); return i >= 0 ? i + 1 : NaN; }
   function windowFor(month, year) { return { start: new Date(year, month - 1, WINDOW_START_DAY, 0, 0, 0), end: new Date(year, month, WINDOW_START_DAY, 23, 59, 59) }; }
-  // Revival cycle is 20th of the month → 19th of the next (e.g. Jun incentive = 20 Jun → 19 Jul).
-  function revivalWindowFor(month, year) { return { start: new Date(year, month - 1, WINDOW_START_DAY, 0, 0, 0), end: new Date(year, month, WINDOW_START_DAY - 1, 23, 59, 59) }; }
+  // 20th → 19th cycle (e.g. Jun incentive = 20 Jun → 19 Jul). Used by Revival and 1k-5k.
+  function cycleWindowFor(month, year) { return { start: new Date(year, month - 1, WINDOW_START_DAY, 0, 0, 0), end: new Date(year, month, WINDOW_START_DAY - 1, 23, 59, 59) }; }
+  const revivalWindowFor = cycleWindowFor;
   // Callback-within-SLA (Core GCs) cycle: standard 20th → 19th, EXCEPT Jun-2026 which is
   // measured 2 Jul → 19 Jul only — the policy was announced on 2 Jul 2026 (mid-cycle), so the
   // pre-announcement days don't count. This override applies to the callback metric alone.
@@ -91,6 +94,17 @@
     { name: 'Sneha Sharma', spendGmv: 40.63 },
     { name: 'Soumen Das', spendGmv: 51.25 },
   ];
+  // HITS 1k-5k — HITs achievement unlocks the incentive pool (doc §Output).
+  // ≥100% of target → 25% · 50–99% → 15% · <50% → 0%. Measured on the 20th→19th cycle.
+  // Hits come from the HITS-2 handover sheet (handover = TRUE), attributed to the GL named there.
+  // NOTE: the ARR qualifier/multiplier, churn, Spend/Live (Meta+Google), Google go-lives and NPS
+  // multipliers are NOT yet implemented — their data sources are still pending.
+  const MM_BANDS = [
+    { min: 100, pct: 25, label: '≥ 100% of target' },
+    { min: 50,  pct: 15, label: '50–99% of target' },
+    { min: 0,   pct: 0,  label: '< 50% of target' },
+  ];
+  const mmBandOf = (ach) => MM_BANDS.find((b) => ach >= b.min) || MM_BANDS[MM_BANDS.length - 1];
   const campNorm = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
   const campaignIncentive = (sg) => (sg != null && sg > 0) ? (CAMPAIGN_BASELINE / sg) * 25 : null;
   const ADMINS = (I.ADMINS || []).map((e) => e.toLowerCase());
@@ -108,7 +122,7 @@
     if (t === 'revenue' || d.includes('escalation')) return 'revival';
     return 'core';   // default HITS team (GM is assigned only from card 12101)
   }
-  function logicFor(team) { return team === 'hypercare' ? 'hypercare' : team === 'kae' ? 'kae' : team === 'revival' ? 'revival' : team === 'campaign' ? 'campaign' : 'core'; }
+  function logicFor(team) { return team === 'hypercare' ? 'hypercare' : team === 'kae' ? 'kae' : team === 'revival' ? 'revival' : team === 'campaign' ? 'campaign' : team === 'midmarket' ? 'midmarket' : 'core'; }
 
   /* ---- Fuzzy name resolver (Nikita S → Nikita Sinha, etc.) ----------- */
   const norm = (s) => String(s == null ? '' : s).replace(/[\u00a0\u200b\u200c\u200d]/g, ' ').toLowerCase().replace(/[._]/g, ' ').replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -167,8 +181,21 @@
       if (!who) { who = { empId: '', name: e.name, email: 'campaign|' + k, managerEmail: '', teamRaw: 'Campaign', designation: 'Campaign GC', byMonth: {}, reports: [], synthetic: true }; people.push(who); byEmail[who.email] = who; }
       campaignSet[who.email] = true; campaignByEmail[who.email] = e;
     });
+    // 1k-5k GLs are DEFINED by card 12100 — force onto the midmarket team; synthesize any
+    // missing from the People sheet so every GL shows. mmPersonByName maps GL name → person.
+    const mmSet = {}, mmPersonByName = {};
+    row('mmmap').forEach((mp) => {
+      const nm = String(mp.gl || '').trim(); if (!nm) return;
+      const k = campNorm(nm); if (mmPersonByName[k]) return;
+      let who = resolvePerson(mp.glEmail, nm);
+      if (!who) { who = { empId: '', name: nm, email: 'midmarket|' + k, managerEmail: '', teamRaw: '1k-5k', designation: '1k-5k GL', byMonth: {}, reports: [], synthetic: true }; people.push(who); byEmail[who.email] = who; }
+      mmSet[who.email] = true; mmPersonByName[k] = who;
+    });
+    // 1k-5k targets (card 11322, Role='1K-5K') keyed by person|month|year.
+    const mmTargets = {};
+    row('mmtargets').forEach((t) => { const who = resolve(t.name); if (!who) return; mmTargets[who.email + '|' + t.month + '|' + t.year] = Number(t.target) || 0; });
     people.forEach((p) => {
-      p.team = gmSet[p.email] ? 'gm' : (revivalGCs[p.email] ? 'revival' : (campaignSet[p.email] ? 'campaign' : classify(p)));
+      p.team = gmSet[p.email] ? 'gm' : (revivalGCs[p.email] ? 'revival' : (campaignSet[p.email] ? 'campaign' : (mmSet[p.email] ? 'midmarket' : classify(p))));
       p.logic = logicFor(p.team);
       p.role = ADMINS.includes(p.email) ? 'admin' : ((gmSet[p.email] || p.reports.length) ? 'manager' : 'gc');
     });
@@ -222,6 +249,24 @@
     // KAE strikes (by Emp ID)
     const strikesByPM = {}; row('strikes').forEach((r) => { const c = SHEETS.strikes.col; const d = toDate(r[c.date]); if (!d) return; const who = byEmpId[String(r[c.kaeEmpId] || '').trim()] || resolve(r[c.kaeName]); if (!who) return; MONTHS.forEach((m) => { if (!inWindow(d, windowFor(m.month, m.year))) return; (strikesByPM[who.empId + '|' + m.key] || (strikesByPM[who.empId + '|' + m.key] = [])).push({ date: fmtDate(d), issue: String(r[c.issue] || '').trim() }); }); });
 
+    // HITS-2 handover sheet → 1k-5k GL hits. A row counts as a hit for the GL named in col E
+    // only when the handover status (col I) is TRUE. Bucketed into the 20th→19th cycle by HIT date.
+    const mmHitsByPM = {};
+    row('hits2').forEach((r) => {
+      const c = SHEETS.hits2.col;
+      if (String(r[c.handover] || '').trim().toUpperCase() !== 'TRUE' && r[c.handover] !== true) return;
+      const glName = String(r[c.glName] || '').trim(); if (!glName) return;
+      const who = mmPersonByName[campNorm(glName)] || resolve(glName); if (!who) return;
+      const d = toDate(r[c.hitDate]); if (!d) return;
+      MONTHS.forEach((m) => {
+        if (!inWindow(d, cycleWindowFor(m.month, m.year))) return;
+        const k = who.email + '|' + m.key;
+        const store = mmHitsByPM[k] || (mmHitsByPM[k] = { count: 0, rows: [] });
+        store.count++;
+        store.rows.push({ date: fmtDate(d), seller: String(r[c.sellerName] || '').trim(), sid: String(r[c.sellerId] || '').trim(), gl: glName });
+      });
+    });
+
     // Revival log (card 11911 → revival_data.json): count revivals per revival-GC per 20th→19th cycle.
     const revivalByPM = {}; row('revivals').forEach((rv) => { const who = revivalPersonByName[rvNorm(rv.gc)]; if (!who) return; const d = toDate(rv.cr); if (!d) return; MONTHS.forEach((m) => { if (!inWindow(d, revivalWindowFor(m.month, m.year))) return; const k = who.email + '|' + m.key; const store = revivalByPM[k] || (revivalByPM[k] = { count: 0, rows: [] }); store.count++; store.rows.push({ date: fmtDate(d), seller: rv.seller, sid: rv.sid, amt: rv.amt }); }); });
 
@@ -244,6 +289,18 @@
         const rb = revivalBandOf(rv.count);
         const amount = rv.count * rb.rate;
         Object.assign(rec, { threeWeekCounted: [], weightedHits: 0, rawHits: 0, target: 0, achievementPct: null, rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null, coreBand: null, perHitRate: null, outputPct: null, finalPct: null, spend: null, task: null, callback: null, escalations: null, revivalCount: rv.count, revivalRows: rv.rows.slice().sort((a, b) => a.date < b.date ? -1 : 1), revivalBand: rb, revivalRate: rb.rate, amount: amount, adhocPct: 0, adhocAbs: 0, adhocNote: '', dataHealth: 'ok', missingFields: [] });
+        return;
+      }
+      if (p.logic === 'midmarket') {
+        const hv = mmHitsByPM[p.email + '|' + m.key] || { count: 0, rows: [] };
+        const tgt = mmTargets[p.email + '|' + m.month + '|' + m.year];
+        const hasTgt = tgt != null && tgt > 0;
+        const ach = hasTgt ? (hv.count / tgt) * 100 : null;
+        const band = ach == null ? null : mmBandOf(ach);
+        const output = band ? band.pct : null;
+        // Only the HITs output tier is implemented; the ARR/churn/spend-live/go-live/NPS
+        // multipliers are pending their data sources, so finalPct is the unlocked pool only.
+        Object.assign(rec, { threeWeekCounted: [], weightedHits: hv.count, rawHits: hv.count, target: hasTgt ? tgt : 0, achievementPct: ach, rawVals: null, bands: null, bandArr: null, multiplier: null, gcBand: null, multRule: null, coreBand: null, perHitRate: null, outputPct: output, finalPct: output, spend: null, task: null, callback: null, escalations: null, mmHits: hv.count, mmRows: hv.rows.slice().sort((a, b) => a.date < b.date ? -1 : 1), mmBand: band, mmTarget: hasTgt ? tgt : null, mmPending: true, adhocPct: 0, adhocAbs: 0, adhocNote: '', dataHealth: hasTgt ? 'attention' : 'missing', missingFields: hasTgt ? ['ARR / churn / Spend-Live / go-live / NPS multipliers pending — showing unlocked pool only'] : ['No 1k-5k HITS target for ' + m.label + ' (card 11322)'] });
         return;
       }
       if (p.logic === 'campaign') {
@@ -452,6 +509,14 @@
       RAW.gmmap = (gj && gj.mappings) || [];
       I.GMMAP_META = gj ? { generatedAt: gj.generatedAt, count: RAW.gmmap.length, card: gj.card } : null;
     } catch (e) { RAW.gmmap = []; I.GMMAP_META = null; }
+    // 1k-5k GL roster (card 12100) + HITS targets (card 11322).
+    try {
+      const mr = await fetch('midmarket_data.json?_=' + Date.now(), { cache: 'no-store' });
+      const mj = mr.ok ? await mr.json() : null;
+      RAW.mmmap = (mj && mj.mapping) || [];
+      RAW.mmtargets = (mj && mj.targets) || [];
+      I.MIDMARKET_META = mj ? { generatedAt: mj.generatedAt, gls: RAW.mmmap.length, targets: RAW.mmtargets.length, cards: mj.cards } : null;
+    } catch (e) { RAW.mmmap = []; RAW.mmtargets = []; I.MIDMARKET_META = null; }
     say('Calculating incentives…');
     const { people, MONTHS } = computeAll(RAW);
     if (!people.length) throw new Error('People sheet returned no rows');

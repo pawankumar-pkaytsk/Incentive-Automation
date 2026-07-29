@@ -17,10 +17,13 @@ import json, os, sys, subprocess, urllib.request, datetime
 CARD = 10181
 REV_CARD = 11911
 GM_CARD = 12101
+MM_CARD = 12100      # HITS team mapping — 1k-5k GLs
+TGT_CARD = 11322     # hits_target_incentive_automation
 REPO = os.path.expanduser(os.environ.get("REPO_DIR", "~/Incentive-Automation"))
 OUT  = os.path.join(REPO, "task_data.json")
 REV_OUT = os.path.join(REPO, "revival_data.json")
 GM_OUT = os.path.join(REPO, "gm_mapping.json")
+MM_OUT = os.path.join(REPO, "midmarket_data.json")
 START_DATE = os.environ.get("START_DATE", "2026-01-01")
 CRED_CACHE = os.path.expanduser("~/metabase-arr-refresh/.mbcreds")
 DESKTOP_CFG = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
@@ -153,9 +156,37 @@ def main():
     gmset = {m['gmEmail'] or m['gm'] for m in mappings}
     print(f"[out] {GM_OUT} ({os.path.getsize(GM_OUT)} bytes) · {len(mappings)} GM→GC rows · {len(gmset)} GMs")
 
+    # ---- 1k-5k mapping (card 12100) + HITS targets (card 11322) -------
+    # Powers the HITS 1k-5k team: who the GLs are, and their monthly HITS target.
+    mm_rows = req(f"{url}/api/card/{MM_CARD}/query/json", 'POST', {}, H)
+    mm_map = []
+    for r in mm_rows:
+        gl = str(r.get('1k_5k_gl') or '').strip()
+        if not gl:
+            continue
+        mm_map.append({
+            'gl': gl, 'glEmail': str(r.get('1k_5k_gl_email_id') or '').strip().lower(),
+            'gm': str(r.get('gm') or '').strip(), 'gmEmail': str(r.get('gm_email_id') or '').strip().lower(),
+        })
+    tgt_rows = req(f"{url}/api/card/{TGT_CARD}/query/json", 'POST', {}, H)
+    targets = []
+    for r in tgt_rows:
+        role = str(r.get('Role') or '').strip().upper()
+        if role != '1K-5K':
+            continue
+        try:
+            mo, yr = int(r.get('Target_Month')), int(r.get('Target_Year'))
+        except (TypeError, ValueError):
+            continue
+        targets.append({'name': str(r.get('Name') or '').strip(), 'target': r.get('HITS_Target'), 'month': mo, 'year': yr})
+    mm_data = {'generatedAt': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+               'cards': {'mapping': MM_CARD, 'targets': TGT_CARD}, 'mapping': mm_map, 'targets': targets}
+    json.dump(mm_data, open(MM_OUT, 'w'), separators=(',', ':'))
+    print(f"[out] {MM_OUT} ({os.path.getsize(MM_OUT)} bytes) · {len(mm_map)} GLs · {len(targets)} 1k-5k target rows")
+
     if '--push' in sys.argv:
-        subprocess.run(['git', '-C', REPO, 'add', 'task_data.json', 'revival_data.json', 'gm_mapping.json'], check=True)
-        r = subprocess.run(['git', '-C', REPO, 'commit', '-m', 'Refresh task/callback + revival + GM-mapping data (cards 10181, 11911, 12101)'], capture_output=True, text=True)
+        subprocess.run(['git', '-C', REPO, 'add', 'task_data.json', 'revival_data.json', 'gm_mapping.json', 'midmarket_data.json'], check=True)
+        r = subprocess.run(['git', '-C', REPO, 'commit', '-m', 'Refresh task/callback + revival + GM + 1k-5k data (cards 10181, 11911, 12101, 12100, 11322)'], capture_output=True, text=True)
         print(r.stdout.strip() or r.stderr.strip())
         if r.returncode == 0:
             subprocess.run(['git', '-C', REPO, 'push', 'origin', 'main'], check=True); print("[push] deployed")

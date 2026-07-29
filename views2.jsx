@@ -48,6 +48,13 @@ const RosterRow = ({ person, onOpen, index, rank }) => {
           <span className="sd-num" style={{ font: '600 13px var(--sd-font-sans)', color: m.strikeCount ? 'var(--sd-red-500)' : 'var(--sd-green-700)' }}>{m.strikeCount} strike{m.strikeCount === 1 ? '' : 's'}</span>
         ) : person.logic === 'revival' ? (
           <span className="sd-num" style={{ font: '600 13px var(--sd-font-sans)', color: m.amount > 0 ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' }}>{m.revivalCount} revived{m.amount > 0 ? '' : ' · below 21'}</span>
+        ) : person.logic === 'midmarket' ? (
+          m.mmTarget == null
+            ? <span style={{ font: '400 13px var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>No target</span>
+            : <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ flex: 1, maxWidth: 80 }}><ProgressBar pct={Math.min(100, m.achievementPct || 0)} color={(m.achievementPct || 0) >= 100 ? 'var(--sd-green-700)' : (m.achievementPct || 0) >= 50 ? team.accent : 'var(--sd-red-500)'} delay={index * 18} /></div>
+                <span className="sd-num" style={{ font: '600 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-1)' }}>{m.mmHits}/{m.mmTarget}</span>
+              </div>
         ) : person.logic === 'campaign' ? (
           <span className="sd-num" style={{ font: '600 13px var(--sd-font-sans)', color: m.campaignSpendGmv == null ? 'var(--sd-fg-3)' : m.campaignSpendGmv <= 42 ? 'var(--sd-green-700)' : 'var(--sd-fg-1)' }}>{m.campaignSpendGmv == null ? '—' : m.campaignSpendGmv + '% S/G'}</span>
         ) : src.achievementPct != null ? (
@@ -57,7 +64,7 @@ const RosterRow = ({ person, onOpen, index, rank }) => {
           </div>
         ) : <span style={{ font: '400 13px var(--sd-font-sans)', color: 'var(--sd-fg-3)' }}>—</span>}
       </div>
-      <div className="sd-num" style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.logic === 'kae' || person.logic === 'revival' || person.logic === 'campaign' ? '—' : src.weightedHits.toFixed(1)}</div>
+      <div className="sd-num" style={{ font: '500 13px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{person.logic === 'kae' || person.logic === 'revival' || person.logic === 'campaign' ? '—' : person.logic === 'midmarket' ? String(m.mmHits) : src.weightedHits.toFixed(1)}</div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         {person.logic === 'kae' || person.logic === 'revival'
           ? <span className="sd-num" style={{ font: '700 14px/1 var(--sd-font-sans)', color: m.amount > 0 ? 'var(--sd-primary)' : 'var(--sd-fg-3)' }}>{I.inr(m.amount)}</span>
