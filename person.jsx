@@ -399,14 +399,15 @@ const PersonView = ({ person, viewer, onBack, onChange, onOpenPerson }) => {
                 <div style={{ padding: '4px 16px 20px', font: '500 13px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>No HIT2 conversions credited this month.</div>
               ) : (
                 <div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '0.5fr 1fr 2.6fr', gap: 8, padding: '8px 16px', background: 'var(--sd-bg-app)', font: '600 10px/1 var(--sd-font-sans)', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sd-fg-2)' }}>
-                    <span>#</span><span>Month</span><span>Seller</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '0.4fr 0.9fr 2fr 1.9fr', gap: 8, padding: '8px 16px', background: 'var(--sd-bg-app)', font: '600 10px/1 var(--sd-font-sans)', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--sd-fg-2)' }}>
+                    <span>#</span><span>Month</span><span>Seller</span><span>Seller ID</span>
                   </div>
                   {rows.map((s, i) => (
-                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '0.5fr 1fr 2.6fr', gap: 8, padding: '9px 16px', borderTop: '1px solid var(--sd-stroke)', alignItems: 'center' }}>
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '0.4fr 0.9fr 2fr 1.9fr', gap: 8, padding: '9px 16px', borderTop: '1px solid var(--sd-stroke)', alignItems: 'center' }}>
                       <span className="sd-num" style={{ font: '700 12px/1 var(--sd-font-sans)', color: 'var(--sd-primary)' }}>{i + 1}</span>
                       <span className="sd-num" style={{ font: '500 12px/1 var(--sd-font-sans)', color: 'var(--sd-fg-2)' }}>{s.date}</span>
                       <span style={{ font: '500 12px/1.3 var(--sd-font-sans)', color: 'var(--sd-fg-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.seller || s.sid}</span>
+                      <span className="sd-num" style={{ font: '400 11px/1.3 var(--sd-font-mono, var(--sd-font-sans))', color: 'var(--sd-fg-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.sid}>{s.sid || '—'}</span>
                     </div>
                   ))}
                 </div>
