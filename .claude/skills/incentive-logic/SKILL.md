@@ -1,94 +1,98 @@
 ---
 name: incentive-logic
-description: Reference for how HITS incentives are calculated (team logics, achievement bands, input-band multiplier, callback-within-SLA, hypercare schedule, KAE strikes, PIP). Use when changing or explaining the incentive math, and to know which files to keep in sync.
+description: How every HITS incentive is calculated — Core GC, Hypercare, KAE, Revival, Campaign, 1k-5k (midmarket), GM rollup — plus team-membership rules, windows, overrides and which files to keep in sync. Use when changing or explaining the incentive maths.
 ---
 
 # Incentive logic reference
 
-> **Golden rule:** the math lives in BOTH `engine.js` (computes over the seeded sample roster; also defines `I.INPUTS` band labels/thresholds shown in the UI) and `sheets.js` (`computeAll`, over live rows). **Any logic change must be made in both**, or sample and live disagree. If it touches task/callback sub_types or the SLA rule, also update `tools/incentive_task_refresh.py` (see the `refresh-task-data` skill).
+> **Golden rule:** the maths lives in **both** `engine.js` (seeded sample + shared band definitions) and `sheets.js` (`computeAll`, live rows). **Every logic change must go in both**, or sample and live disagree. If it changes what's counted upstream, also update the refresh scripts (see `refresh-data`).
 
 ## Team → logic
-Teams (from designation/team): core, midmarket, goodseller, hypercare, revival, campaign, ai, kae, gm → mapped by `logicFor()` to one of: **core**, **hypercare**, **kae**, **revival** (GM = rollup of GC descendants).
+`logicFor(team)` → `core` · `hypercare` · `kae` · `revival` · `campaign` · `midmarket` · `goodseller` · `ai`.
 
-## core logic
-`output = perHitRate × weightedHits`, then `finalPct = output × multiplier`.
+**Membership comes from cards, not the People sheet** (`classify()` never returns `gm` or `midmarket`):
 
-- **Achievement %** = `weightedHits ÷ target × 100`.
-- **Core rate bands** (by achievement %): `>120% → 6.25` · `90–120% → 4.5` · `50–90% → 1.5` · `<50% → 0`.
-- **Multiplier** from 4 input bands, each graded green/yellow/red:
-  - all green → **1.5** · mix green/yellow → **1.3** · all yellow → **1.0** · exactly 1 red → **0.85** · ≥2 red → **0.70** · all red → **0**.
-- **Input bands** (A–D):
-  | # | Input | Green | Yellow | Red |
-  |---|---|---|---|---|
-  | A | Spend / Live | >80% | 70–80% | <70% |
-  | B | Task Adherence | >90% | 70–90% | <70% |
-  | C | **Callback Adherence within SLA** | **>90%** | **75–90%** | **<75%** |
-  | D | WES (Escalations) | <25 | 25–45 | >45 (lower is better) |
+| Team | Source of truth |
+|---|---|
+| **GM** | card **12101** (strictly). Anyone listed is a GM; nobody else is. |
+| **1k-5k** | card **12100**, **plus** anyone with a 1k-5k target row for *that* month (`p.mmPeriods`, enforced in `teamMembers()`) so past GLs appear in their own months only |
+| **Revival** | card **11911** submitters (synthesized if absent from the roster) |
+| **Campaign** | `CAMPAIGN_W0` in `sheets.js` |
+| everything else | `classify()` on designation/teamRaw |
 
-## Task & Callback (from Metabase card 10181 → task_data.json)
-Bucketed per GC per pay-period window (**20th→20th**, `WINDOW_START_DAY=20`). "Done" = status `completed`/`closed`.
-- **Task Adherence** = done ÷ total, over sub_types: `internal_seller_escalation_general_request`, `pre-live-call`, `troubleshoot_manual_action`.
-- **Callback Adherence within SLA** = (done AND `tat ≤ sla_in_min`) ÷ total, over sub_type `schedule_call` **only** (Core GCs only). `tat` and `sla_in_min` are minutes from the query. **Window:** `callbackWindowFor` — standard 20th→19th cycle, EXCEPT **Jun 2026 = 2 Jul→19 Jul** (policy launched mid-cycle on 2 Jul 2026; pre-announcement days excluded). Task adherence keeps the plain 20th→20th `windowFor`.
-- Code: `sheets.js` task/callback loop (`taskByPM`/`callByPM`); the callback bucket's `done` holds the *within-SLA* count so `pct = done/total`.
+**Cluster lead** (`p.cl`) comes from card 12101's `cl` — constant per GM, inherited by their GCs.
 
-## WES (Input D)
-`WES = social×3 + sos×1.5 + internal×1`, de-duped by seller/day/type. From the `sos` sheet.
+## Windows (deliberately not uniform)
+- Most metrics: **20th → 20th** (`windowFor`, `WINDOW_START_DAY = 20`)
+- Revival + 1k-5k ARR/Spend-Live: **20th → 19th** (`cycleWindowFor`)
+- Callback-within-SLA: 20th→19th, **except Jun-2026 = 2 Jul → 19 Jul** (policy launched mid-cycle on 2 Jul; `callbackWindowFor`)
+- 1k-5k HIT2 achieved: **calendar month**
 
-## midmarket (HITS 1k-5k) logic — COMPLETE
-`Final % = pool × ARR mult × churn mult × Meta S/L mult × Google S/L mult × Go-live mult`, and **any failed gate ⇒ 0%**.
+---
 
+## core
+`output = perHitRate × weightedHits`, then `× multiplier`.
+- Achievement % = `weightedHits ÷ target`. `weightedHits`: 3-week sellers ×1.5, hypercare ×1.
+- Rate bands: `>120% → 6.25` · `90–120% → 4.5` · `50–90% → 1.5` · `<50% → 0`
+- Multiplier from 4 input bands: all green→**1.5** · mix g/y→**1.3** · all yellow→**1.0** · exactly 1 red→**0.85** · ≥2 red→**0.70** · all red→**0**
+
+| # | Input | Green | Yellow | Red |
+|---|---|---|---|---|
+| A | Spend / Live | >80% | 70–80% | <70% |
+| B | Task Adherence | >90% | 70–90% | <70% |
+| C | **Callback Adherence within SLA** | **>90%** | **75–90%** | **<75%** |
+| D | WES (escalations) | <25 | 25–45 | >45 (lower better) |
+
+- **Task** = closed/completed ÷ total over sub_types `internal_seller_escalation_general_request`, `pre-live-call`, `troubleshoot_manual_action`.
+- **Callback within SLA** = (done AND `tat ≤ sla_in_min`) ÷ total, sub_type **`schedule_call` only**.
+- **WES** = social×3 + sos×1.5 + internal×1, de-duped per seller/day/type.
+
+## hypercare
+Cumulative per-HIT schedule `[7, 8, 9, 11, 15]`, then flat `20` beyond the 5th. No multiplier.
+
+## kae
+Flat base ₹6,500 reduced by strike bands (0 → full, more strikes → larger deduction → 0). From the strikes sheet by Emp ID.
+
+## revival
+Whole count × band rate on the 20th→19th cycle (non-tiered):
+`≤20 → ₹0` · `21–30 → ₹200/rev` · `31–40 → ₹250/rev` · `41+ → ₹375/rev`
+Boundary: 40 uses 250 (per the literal "31–40" row); >40 uses 375.
+
+## campaign
+Linear **inverse** on Spend/GMV: `Incentive% = 25% × (42% ÷ Spend/GMV%)`. At 42% → 25%; lower is better.
+**Hard-coded for Jun-2026 only** (`CAMPAIGN_KEY`, `CAMPAIGN_W0`). **TODO:** rolling query + POC mapping.
+
+## midmarket (HITS 1k-5k) — full chain
+```
+Final % = pool × ARR × churn × MetaSL × GoogleSL × Golive     — any failed gate ⇒ 0%
+```
 | Component | Value | Gate | Multiplier |
 |---|---|---|---|
-| **Pool** (HIT2 attainment) | HIT2 achieved ÷ target | pool 0 ⇒ 0 | ≥100%→25% · 50–99%→15% · <50%→0 |
-| **ARR** | achieved ÷ **earned** target | **<85% ⇒ 0** | ≥150%→1.25× · ≥200%→2× · else 1× |
-| **Churn** | count | **2+ ⇒ 0** | 0→1× · 1→0.5× |
-| **Spend/Live Meta** | day-wise weighted | **<60% ⇒ 0** | >80%→1.25× |
-| **Spend/Live Google** | day-wise weighted | **<65% ⇒ 0** | >75%→1.2× |
-| **Google go-live** | live ÷ assigned | **<50% ⇒ 0** | >65%→1.25× |
+| **Pool** | HIT2 achieved ÷ target | pool 0 ⇒ 0 | ≥100%→25% · 50–99%→15% · <50%→0 |
+| **ARR** | achieved ÷ **earned** target | **<85% ⇒ 0** | ≥150%→1.25× · ≥200%→2× |
+| **Churn** | events in cycle | **2+ ⇒ 0** | 0→1× · 1→0.5× |
+| **Meta S/L** | day-wise weighted | **<60% ⇒ 0** | >80%→1.25× |
+| **Google S/L** | day-wise weighted | **<65% ⇒ 0** | >75%→1.2× |
+| **Go-live** | live ÷ assigned | **<50% ⇒ 0** | >65%→1.25× |
 
 - **ARR target is *earned***: each cohort seller carries a per-age target from card 11020's TARGET row (M0 1859 · M1 3668 · M2 4133 · M3 4480 · M4 4748 · M5 4647), **capped at M5** (`m6` is NULL — the cap is required). Age = report month − HIT1 month.
-- **HIT2 freeze**: at conversion the seller stops accruing target and **drops out of later months** (contributes from HIT1 handover until HIT2 handover). Guard: only freeze if `HIT1 month ≤ conversion month ≤ report month`, else treat as bad data (fires on 1 real seller).
-- **HIT2 achieved** = card 10453 `hit2=1` with `hit2_year/month = report month` (**calendar month**, deliberately a different window from ARR/Spend-Live), excluding `good_seller`, credited to the GL named in the **HITS-2 handover sheet**. ⚠️ Do **not** attribute HIT2 via card 7753 — it blanks post-move and makes HIT2 read **0 for everyone** (verified).
-- **Seller → GL is `7753.growth_consultant_name`**, NOT `growth_lead_name` (that matches 0/252 sellers — verified trap).
-- **Spend/Live** = Σ(seller-days with channel spend > 0) ÷ (settled days × live sellers). Sum numerators/denominators — never average daily percentages. Meta denominator = assigned sellers; Google denominator = Google-live sellers. "Settled days" = days in cycle with market-wide booked spend > 0.
-- **Google-live** = has `google_ad_account_id` AND lifetime Google spend > ₹1, **frozen at the cycle end (19th)** by cumulating daily `spend_google` from card 10469 (stricter than 7401's current-state lifetime: 80 vs 99 sellers).
-- **Churn** = cumulative spend ≥ ₹11,800 then no spend for > 21 days as of cycle end.
-- **Universe** = `team='HITS'` & not `good_seller` & GC in the GL list (218 sellers; 207 mapped).
-- Computed by `~/metabase-arr-refresh/midmarket_incentive_refresh.py` → `midmarket_incentive.json` (the 135 MB daily card can't go to the browser). The app only maps HIT2→GL via the sheet and applies the gates.
+- **HIT2 freeze**: at conversion the seller stops accruing target and **drops out of later months** (contributes from HIT1 handover until HIT2 handover). Frozen ARR = latest **daily** `arr_overall` (card 10469) on/before the conversion Friday. Guard: only freeze if `HIT1 ≤ conversion ≤ report month`, else treat as bad data (fires on 1 real seller).
+- **HIT2 achieved** = card 10453 `hit2=1`, `hit2_year/month = report month`, excluding `good_seller`, credited to the GL named in the **HITS-2 handover sheet**.
+- **Spend/Live** = Σ(seller-days with channel spend > 0) ÷ (settled days × live sellers). Sum numerators/denominators — never average day-rates. Meta denominator = assigned sellers; Google denominator = Google-live sellers. "Settled days" = cycle days with market-wide booked spend > 0.
+- **Google-live** = has `google_ad_account_id` AND lifetime Google spend > ₹1, **frozen at the cycle end** by cumulating daily `spend_google`. (Stricter than 7401's current state: 80 vs 99 sellers — 7401 isn't historised.)
+- **Churn** is an **event**: cumulative spend ≥ ₹11,800 then the >21-day idle threshold crossed within `[cycle start, min(cycle end, today)]`. Never a standing "currently idle" state, and never measured against a future cycle end — both bugs inflated counts.
+- **Target 0 vs no row** are different: `0` → "HIT2 target is 0" (intentional, pool 0); missing row → "No HIT2 target set" + `dataHealth: attention`.
 - **Task/TS compliance and NPS are deliberately NOT gated** (not available per-GL).
 
-## midmarket — historical note (superseded)
-Only the **HITs output tier** is implemented so far: achievement = HITs ÷ target on the **20th→19th** cycle → `≥100% → 25%` · `50–99% → 15%` · `<50% → 0%` (`MM_BANDS`/`mmBandOf`). Stored as `outputPct` and (for now) `finalPct`.
-- **HITs** come from the **HITS-2 handover Google Sheet** (`SHEETS.hits2`, file `198xsGns4LC-80BqAoOdv_Aup29udacaam8WB7jOZalA`, tab `HITS 2 Handover`) — a row counts only when **handover status (col I) = TRUE**, attributed to the **GL Name (col E)**. Note: card 10992's changelog was evaluated for this and rejected — it only emits GC/GM/KAM roles and reproduced just 45% of the sheet's GLs.
-- **GL roster** = card **12100** and **targets** = card **11322** (`Role='1K-5K'`), both snapshotted to `midmarket_data.json`. GLs missing from the People sheet are synthesized so they still appear. The People sheet's team column is **never** a source of 1k-5k membership.
-- **Membership is per-period** (`p.mmPeriods`, enforced in `teamMembers()`): card-12100 GLs count in **every** period; anyone with a 1k-5k **target for a given month** counts in **that month only**. So a GL who has since left the team (e.g. a June target but absent from the current card) still appears in June and not July.
-- **NOT yet implemented** (data sources pending): ARR qualifier (≥85%) + multiplier (1.5×→1.25×, 2×→2×), churn (1→0.5×, 2→0), Spend/Live Meta (<60%→0, 60–80%→1×, >80%→1.25×) with its Task>90% & TS=100% qualifier, Spend/Live Google (<65%→0, 65–75%→1×, >75%→1.2×), Google go-lives (<50%→0, 50–65%→1×, >65%→1.25×), and NPS (bands undefined). The PersonView shows these in a "Multipliers not yet live" panel and `dataHealth` is set to `attention`.
+## GM rollup
+`output = (HITs ÷ target) × 25%`, then the **GC-ops multiplier** over the GM's card-12101 GCs: any Red→**0.70** · any Yellow, none Red→**1.20** · all Green→**1.50**.
+- **GL kicker**: the GM also earns **1/5 of each reporting 1k-5k GL's incentive** (card 12100 gm→gl), **summed** and added on top. ⚠️ If it should be an *average* for multi-GL GMs, that's a one-line change.
+- `gm.gcEmails` carries the card-12101 GC list — the roster hierarchy (`person.reports`) is only a fallback for sample data.
 
-## campaign logic
-Linear **inverse** incentive on Spend/GMV: `Incentive% = 25% × (baseline ÷ Spend/GMV%)`, baseline = 42%. At 42% → 25%; below → higher; above → lower. Lower Spend/GMV is better. Code: `CAMPAIGN_BASELINE`/`CAMPAIGN_W0`/`campaignIncentive` + the `campaign` branch in `computeAll` (sheets.js) and `computeCampaignMonth` (engine.js). **HARD-CODED** for Jun-2026 (`CAMPAIGN_KEY='2026-06'`, week-0 Spend/GMV per GC in `CAMPAIGN_W0`); the 4 GCs are force-synthesized onto the campaign team. **TODO Jul onward:** replace `CAMPAIGN_W0` with a rolling Metabase query + POC mapping (snapshot it in `incentive_task_refresh.py` like the others). Result is stored as `finalPct` (a %). Other periods show pending until the query is wired.
-
-## hypercare logic
-Cumulative per-HIT schedule `[7, 8, 9, 11, 15]` then flat `20` per HIT beyond the 5th. No multiplier.
-
-## kae logic
-Flat base ₹6,500, reduced by strike bands (0 → full; more strikes → larger deduction, down to 0). From the `strikes` sheet, matched by Emp ID.
-
-## revival logic (from Metabase card 11911 → revival_data.json)
-Count-based ₹ payout, per revival GC per **20th→19th** cycle (note: NOT 20th→20th; uses `revivalWindowFor`). Count = number of revival-log rows attributed to the GC (`submitted_by`, resolved to roster) in the window. Amount = **whole count × the band's rate** (non-tiered):
-| Revival count | Rate | Max |
-|---|---|---|
-| ≤ 20 | ₹0 | below threshold |
-| 21–30 | ₹200/rev | ₹6,000 |
-| 31–40 | ₹250/rev | ₹10,000 |
-| 40+ (41+) | ₹375/rev | uncapped ("₹15,000 & up") |
-Boundary: 40 → 250 (per literal "31–40" row); >40 → 375. Code: `REVIVAL_BANDS`/`revivalBandOf` + the `revival` branch in `computeAll` (sheets.js) and `computeRevivalMonth` (engine.js). Data source: `tools/incentive_task_refresh.py` also pulls card 11911. `revival` team is not PIP-eligible.
+## Overrides & notices
+- `FIXED_PCT = { 'WM363': 15 }` — pins a person's final %; **wins over everything, kicker included**.
+- `NOTICE` — **Good Seller** → "Data awaiting from Rohit"; **AI** → "Flat incentive for now". Both render a notice instead of a number (`finalPct: null`) and show the CL.
+- Good Seller and AI have **no computed logic** — they are placeholders awaiting rules.
 
 ## Other concepts
-- **weightedHits**: 3-week-go-live sellers count ×1.5; hypercare counts ×1.
-- **GM rollup**: GM HITs from handover col F; output = (HITs ÷ target) × 25%, then a GC-ops multiplier across the GM's **reporting core GCs**. That GM→core-GC mapping comes from **Metabase card 12101** → `gm_mapping.json` (`gmGCs` in computeAll, resolved by email then name), overriding the roster's manager hierarchy; GMs absent from the mapping fall back to the roster `descendants`.
-- **PIP flag**: last 2 months; threshold GC 50%, GM 70%; KAE n/a.
-- **adhoc adjustments**: relative % and flat pp overrides per person (see AdhocEditor).
-- **dataHealth**: ok / attention / missing, with `missingFields`.
-
-## Where numbers surface
-`I.finalPctWithAdhoc(p)`, `I.cur(p)`, `I.teamSummary(key)`, `I.INPUTS` (band defs). Every number is clickable → drill-down (`drill.jsx`) showing the underlying rows + CSV.
+PIP flag (last 2 months; GC 50%, GM 70%; Core & Hypercare GCs only) · adhoc adjustments (relative % + flat pp) · `dataHealth` ok/attention/missing with `missingFields` · every number is clickable → drill-down with the formula substituted and CSV export.
