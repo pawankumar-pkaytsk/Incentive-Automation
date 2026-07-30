@@ -125,9 +125,10 @@ const Drill = {
       { key: 'tat', label: 'TAT / SLA (min)', w: '1.1fr', align: 'right', num: true, fmt: (v, r) => (v == null ? '—' : v) + ' / ' + (r && r.sla != null ? r.sla : '—') },
       { key: 'done', label: 'Within SLA', w: '0.9fr', align: 'right', fmt: (v) => v ? '✓ yes' : '—', color: (v) => v ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' },
     ] : [
+      { key: 'id', label: 'Task ID', w: '1.2fr' },
       { key: 'date', label: 'Date', w: '0.9fr', num: true },
-      { key: 'subtask', label: 'Subtask', w: '2fr' },
-      { key: 'status', label: 'Status', w: '1fr' },
+      { key: 'subtask', label: 'Subtask', w: '1.8fr' },
+      { key: 'status', label: 'Status', w: '0.9fr' },
       { key: 'done', label: 'Counts', w: '0.7fr', align: 'right', fmt: (v) => v ? '✓ done' : '—', color: (v) => v ? 'var(--sd-green-700)' : 'var(--sd-fg-3)' },
     ];
     const win = !isCb ? ' · window (20th→20th)' : (rec.key === '2026-06' ? ' · 2–19 Jul (SLA launch)' : ' · 20th→19th cycle');
