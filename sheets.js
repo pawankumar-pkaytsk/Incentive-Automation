@@ -203,6 +203,9 @@
       if (mmPersonByName[k]) return mmPersonByName[k];
       let who = resolvePerson(email, nm);
       if (!who) { who = { empId: '', name: nm, email: 'midmarket|' + k, managerEmail: '', teamRaw: '1k-5k', designation: '1k-5k GL', byMonth: {}, reports: [], synthetic: true }; people.push(who); byEmail[who.email] = who; }
+      // Remember the canonical card-12100 name — midmarket_incentive.json is keyed by it, and it
+      // often differs from the roster name in spelling/case ("Jaison s", "LEHAR GUPTA").
+      if (!who.mmName) who.mmName = nm;
       mmSet[who.email] = true; mmPersonByName[k] = who;
       mmPeriods[who.email] = mmPeriods[who.email] || {};
       return who;
@@ -344,7 +347,16 @@
         const base = band ? band.pct : 0;
         // Computed inputs for this GL/period from the snapshot (ARR, Spend/Live, go-live, churn).
         const mi = (RAW.mmInc && RAW.mmInc.months && RAW.mmInc.months[m.key]) || null;
-        const gi = mi && mi.gls ? (mi.gls[p.name] || null) : null;
+        // Look up by the canonical card-12100 name first (that's how the snapshot is keyed), then
+        // the roster name, then a normalised match — roster and card names often differ in case.
+        let gi = null;
+        if (mi && mi.gls) {
+          gi = mi.gls[p.mmName] || mi.gls[p.name] || null;
+          if (!gi) {
+            const want = campNorm(p.mmName || p.name);
+            for (const gk in mi.gls) { if (campNorm(gk) === want) { gi = mi.gls[gk]; break; } }
+          }
+        }
         const arrPct = gi ? gi.arrPct : null;
         const metaSL = gi ? gi.metaSL : null, googleSL = gi ? gi.googleSL : null, golive = gi ? gi.golive : null;
         const churn = gi ? (gi.churn || 0) : 0;

@@ -26,6 +26,14 @@ Almost always an **attribution** break, not a maths bug:
 - **ARR rolled up to unknown people** → someone used `7753.growth_lead_name` (matches 0/252). The GL is **`growth_consultant_name`**.
 - Check name resolution: the handover sheet uses short names; `buildResolver` does exact → first+last → first-token. "Saurabh Kumar" ≠ "Sourabh Yadav".
 
+## 3b. One GL has no breakdown while others do
+`midmarket_incentive.json` is keyed by the **card-12100 GL name** (`Jaison s`, `LEHAR GUPTA`,
+`SHREYASH KOTLAWAR`), which often differs in case/spelling from the roster name. Looking the row
+up by `p.name` silently returns null and the entire ARR/Spend-Live breakdown vanishes for that
+person only. Persons carry `p.mmName` (the canonical card name) — look up by that first, then the
+roster name, then a normalised match. Same trap applies to any future snapshot keyed by name;
+prefer keying by email where possible.
+
 ## 4. A count looks absurdly high
 - **Churn** must be an **event inside the cycle**, not "currently idle", and must never measure idle against a **future** cycle end. Both bugs produced inflated counts (13 vs a real 3).
 - For any in-progress month, evaluation is capped at `min(cycle end, today)`.
