@@ -65,7 +65,13 @@ Client ID (public): `334591605851-5e15787uo5lu6raii82a10n1u2le3jms.apps.googleus
 | **Good Seller** | ⛔ "Data awaiting from Rohit" |
 | **AI** | ⛔ "Flat incentive for now" |
 
-Known open items: Campaign rolling query · missing/zero target rows in card 11322 · 26 sellers silently dropped from 1k-5k (GC not in GL list, unsurfaced) · GL kicker sums across multi-GL GMs (confirm sum vs average) · Task/TS compliance and NPS deliberately ungated.
+**Known open items**
+1. 🐞 **OPEN BUG — "Jaison" (WM1621) shows *Data missing*** on the 1k-5k view while his data exists in the snapshot. Fully triaged (code, data and cache all ruled out) — see `troubleshoot-data` §3b for exactly what's been eliminated and the one console command that identifies the cause. Durable fix: key `midmarket_incentive.json` by **email** instead of name.
+2. **Campaign** rolling Spend/GMV query + POC mapping (Jul onward still hard-coded).
+3. **Missing/zero target rows** in card 11322 (Parth Mohanty has no June row; Priyanshu Raj, Aitesam Khan, Patil Jayesh have none at all).
+4. **26 sellers silently dropped** from 1k-5k (GC not in the GL list) — not surfaced in the UI.
+5. **GL kicker sums** across multi-GL GMs — confirm sum vs average.
+6. Task/TS compliance and NPS deliberately ungated.
 
 ## 8. Secrets & access (transfer out-of-band)
 1. **Metabase login** → `~/metabase-arr-refresh/.mbcreds`. **Switch to a service account** so it survives staff changes — this is the single biggest continuity risk.

@@ -34,6 +34,34 @@ person only. Persons carry `p.mmName` (the canonical card name) — look up by t
 roster name, then a normalised match. Same trap applies to any future snapshot keyed by name;
 prefer keying by email where possible.
 
+### ⚠️ OPEN BUG (unresolved as of 2026-08-01) — "Jaison" still shows *Data missing*
+The §3b fix resolved LEHAR GUPTA and SHREYASH KOTLAWAR but **Jaison (WM1621) still renders the
+null state** on the live site. Everything below was verified and is **NOT** the cause — don't redo it:
+
+- Deployed `sheets.js` contains both halves of the fix (`who.mmName = nm` at ~line 208; the
+  `mmName → name → normalised` lookup at ~line 350).
+- Live `midmarket_data.json`: `{gl:'Jaison s', glEmail:'jaison@blitzscale.co'}`, Jul target 1.
+- Live `midmarket_incentive.json`: `months['2026-07'].gls['Jaison s']` exists with 16 detail rows
+  (arrPct 61.93, arrTarget 60650, metaSL 58.33, googleSL 51.39, golive 37.5, churn 1).
+- Replaying his exact case (roster name `Jaison`, email `jaison@blitzscale.co`) through the
+  deployed resolver **does** return the row — so the logic is right in isolation.
+- The snapshot **is** loading in his session: his HIT2 = 1 comes from that same file.
+- Cache was suspected and ruled out (live `index.html` → `?v=20260730a`; that URL serves the fix).
+
+**Next step — get runtime state** (can't be done without signing in). On his page, console:
+```js
+(p=>({name:p.name,mmName:p.mmName,team:p.team,meta:INCENTIVE.MMINC_META,
+      gi:(INCENTIVE.cur(p)||{}).mmHasInputs,arr:(INCENTIVE.cur(p)||{}).mmArrPct}))
+ (INCENTIVE.people.find(x=>/jaison/i.test(x.name)))
+```
+- `mmName:'Jaison s'` + `gi:false` → the lookup genuinely fails at runtime; instrument `mi.gls` keys.
+- `mmName:undefined` → he reaches the team via a path that skips `mkMM` — find it.
+- `meta:null` → the snapshot didn't load that session.
+
+**Likely durable fix regardless:** key `midmarket_incentive.json` by **email**, not name. The Python
+script already resolves each seller to a GL; emit `glEmail` alongside `gl` and look up by email.
+That removes this whole class of bug permanently.
+
 ## 4. A count looks absurdly high
 - **Churn** must be an **event inside the cycle**, not "currently idle", and must never measure idle against a **future** cycle end. Both bugs produced inflated counts (13 vs a real 3).
 - For any in-progress month, evaluation is capped at `min(cycle end, today)`.
