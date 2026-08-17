@@ -35,10 +35,13 @@ KEEP_SUBS = set(TASK_SUBS + CALL_SUBS)
 
 
 def creds():
+    """Return the credential dict from env, then .mbcreds, then the Claude Desktop config."""
     if os.environ.get('METABASE_URL'):
-        return os.environ['METABASE_URL'].rstrip('/'), os.environ['METABASE_USER_EMAIL'], os.environ['METABASE_PASSWORD']
-    e = json.load(open(CRED_CACHE)) if os.path.exists(CRED_CACHE) else json.load(open(DESKTOP_CFG))['mcpServers']['metabase']['env']
-    return e['METABASE_URL'].rstrip('/'), e['METABASE_USER_EMAIL'], e['METABASE_PASSWORD']
+        return {k: os.environ[k] for k in
+                ('METABASE_URL', 'METABASE_USER_EMAIL', 'METABASE_PASSWORD', 'METABASE_API_KEY')
+                if os.environ.get(k)}
+    return json.load(open(CRED_CACHE)) if os.path.exists(CRED_CACHE) \
+        else json.load(open(DESKTOP_CFG))['mcpServers']['metabase']['env']
 
 
 def req(url, method='GET', body=None, H=None):
@@ -55,14 +58,33 @@ def req(url, method='GET', body=None, H=None):
     raise last
 
 
+def mb_auth():
+    """(base_url, headers). Prefers METABASE_API_KEY; falls back to an email/password session.
+
+    An API key survives staff changes and password rotations, so it is the preferred
+    credential — see ONBOARDING §8.
+    """
+    c = creds()
+    url = c['METABASE_URL'].rstrip('/')
+    key = (c.get('METABASE_API_KEY') or '').strip()
+    if key:
+        print("[auth] using METABASE_API_KEY")
+        return url, {'Content-Type': 'application/json', 'x-api-key': key}
+    email, pw = (c.get('METABASE_USER_EMAIL') or '').strip(), c.get('METABASE_PASSWORD') or ''
+    if not (email and pw):
+        raise SystemExit("[auth] no METABASE_API_KEY and no email/password in .mbcreds")
+    print(f"[auth] using session for {email}")
+    tok = req(url + "/api/session", 'POST', {"username": email, "password": pw},
+              {'Content-Type': 'application/json'})['id']
+    return url, {'Content-Type': 'application/json', 'X-Metabase-Session': tok}
+
+
 def d10(v):
     return str(v)[:10] if v else ''
 
 
 def main():
-    url, email, pw = creds()
-    tok = req(url + "/api/session", 'POST', {"username": email, "password": pw}, {'Content-Type': 'application/json'})['id']
-    H = {'Content-Type': 'application/json', 'X-Metabase-Session': tok}
+    url, H = mb_auth()
     rows = req(f"{url}/api/card/{CARD}/query/json", 'POST', {}, H)
     print(f"[task] card {CARD}: {len(rows)} rows")
 

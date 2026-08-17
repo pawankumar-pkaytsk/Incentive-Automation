@@ -25,8 +25,7 @@ CHURN_IDLE_DAYS = 21           # … then no spend for > 21 days
 
 
 def creds():
-    e = json.load(open(CRED))
-    return e['METABASE_URL'].rstrip('/'), e['METABASE_USER_EMAIL'], e['METABASE_PASSWORD']
+    return json.load(open(CRED))
 
 
 def req(url, method='GET', body=None, H=None, timeout=900):
@@ -41,6 +40,23 @@ def req(url, method='GET', body=None, H=None, timeout=900):
         except Exception as ex:
             last = ex; _t.sleep(5 * (attempt + 1))
     raise last
+
+
+def mb_auth():
+    """(base_url, headers). Prefers METABASE_API_KEY; falls back to an email/password session."""
+    c = creds()
+    url = c['METABASE_URL'].rstrip('/')
+    key = (c.get('METABASE_API_KEY') or '').strip()
+    if key:
+        print("[auth] using METABASE_API_KEY")
+        return url, {'Content-Type': 'application/json', 'x-api-key': key}
+    email, pw = (c.get('METABASE_USER_EMAIL') or '').strip(), c.get('METABASE_PASSWORD') or ''
+    if not (email and pw):
+        raise SystemExit("[auth] no METABASE_API_KEY and no email/password in .mbcreds")
+    print(f"[auth] using session for {email}")
+    tok = req(url + "/api/session", 'POST', {"username": email, "password": pw},
+              {'Content-Type': 'application/json'})['id']
+    return url, {'Content-Type': 'application/json', 'X-Metabase-Session': tok}
 
 
 cn = lambda s: re.sub(r'\s+', ' ', str(s or '').strip().lower())
@@ -73,9 +89,7 @@ def mdiff(a, b): return (b // 100 - a // 100) * 12 + (b % 100 - a % 100)
 
 
 def main():
-    url, email, pw = creds()
-    tok = req(f"{url}/api/session", 'POST', {"username": email, "password": pw}, {'Content-Type': 'application/json'})['id']
-    H = {'Content-Type': 'application/json', 'X-Metabase-Session': tok}
+    url, H = mb_auth()
     q = lambda cid: req(f"{url}/api/card/{cid}/query/json", 'POST', {}, H)
 
     mm = json.load(open(MM_IN))
