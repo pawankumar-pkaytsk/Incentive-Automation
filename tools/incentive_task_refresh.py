@@ -12,7 +12,7 @@ sla=sla_in_min (allowed), tat=tat (actual minutes), s=seller_id.
 Run:  python3 ~/metabase-arr-refresh/incentive_task_refresh.py [--push]
 Env:  REPO_DIR (default ~/Incentive-Automation), START_DATE (default 2026-01-01)
 """
-import json, os, sys, subprocess, urllib.request, datetime
+import json, os, sys, subprocess, urllib.request, urllib.error, datetime
 
 CARD = 10181
 REV_CARD = 11911
@@ -53,7 +53,17 @@ def req(url, method='GET', body=None, H=None):
             r = urllib.request.Request(url, data=data, method=method, headers=H or {})
             with urllib.request.urlopen(r, timeout=600) as resp:
                 return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            # Metabase puts the real cause in the body (e.g. a BigQuery scan-quota
+            # rejection). Without this the log only ever showed "HTTP Error 400".
+            try: msg = json.loads(e.read().decode()).get('error') or ''
+            except Exception: msg = ''
+            print(f"[http] attempt {attempt+1}: HTTP {e.code} {msg[:300]}", flush=True)
+            last = e
+            if 'quota' in msg.lower(): raise   # retrying a quota rejection cannot help
+            _t.sleep(3 * (attempt + 1))
         except Exception as e:
+            print(f"[http] attempt {attempt+1}: {type(e).__name__}: {str(e)[:200]}", flush=True)
             last = e; _t.sleep(3 * (attempt + 1))
     raise last
 

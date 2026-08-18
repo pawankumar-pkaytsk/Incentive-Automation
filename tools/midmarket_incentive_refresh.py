@@ -12,7 +12,7 @@ Cards: 11020 (per-age ARR TARGET) · 7336 (seller×month ARR) · 10453 (cohort/h
 
 Run: python3 ~/metabase-arr-refresh/midmarket_incentive_refresh.py [--push]
 """
-import json, os, sys, re, math, datetime, collections, subprocess, urllib.request
+import json, os, sys, re, math, datetime, collections, subprocess, urllib.request, urllib.error
 
 REPO = os.path.expanduser(os.environ.get("REPO_DIR", "~/Incentive-Automation"))
 OUT = os.path.join(REPO, "midmarket_incentive.json")
@@ -37,7 +37,17 @@ def req(url, method='GET', body=None, H=None, timeout=900):
             r = urllib.request.Request(url, data=data, method=method, headers=H or {})
             with urllib.request.urlopen(r, timeout=timeout) as resp:
                 return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as ex:
+            # Metabase puts the real cause in the body (e.g. a BigQuery scan-quota
+            # rejection). Without this the log only ever showed "HTTP Error 400".
+            try: msg = json.loads(ex.read().decode()).get('error') or ''
+            except Exception: msg = ''
+            print(f"[http] attempt {attempt+1}: HTTP {ex.code} {msg[:300]}", flush=True)
+            last = ex
+            if 'quota' in msg.lower(): raise   # retrying a quota rejection cannot help
+            _t.sleep(5 * (attempt + 1))
         except Exception as ex:
+            print(f"[http] attempt {attempt+1}: {type(ex).__name__}: {str(ex)[:200]}", flush=True)
             last = ex; _t.sleep(5 * (attempt + 1))
     raise last
 

@@ -74,7 +74,7 @@ Client ID (public): `334591605851-5e15787uo5lu6raii82a10n1u2le3jms.apps.googleus
 6. Task/TS compliance and NPS deliberately ungated.
 
 ## 8. Secrets & access (transfer out-of-band)
-1. **Metabase login** → `~/metabase-arr-refresh/.mbcreds`. **Switch to a service account** so it survives staff changes — this is the single biggest continuity risk.
+1. **Metabase credential** → `~/metabase-arr-refresh/.mbcreds`. Now a **`METABASE_API_KEY`**, which survives staff changes (this was the single biggest continuity risk). Subject to a **daily BigQuery scan quota** that allows roughly one full refresh per day — see `refresh-data`.
 2. **Google Cloud Console** access to the project owning the OAuth client.
 3. **GitHub** write access (or transfer the repo to an org).
 4. **GoDaddy DNS** for `hits-incentive.xyz`.
@@ -90,4 +90,4 @@ Edit → **bump `?v=`** → commit → push `main` → live in ~1–2 min → ha
 - Styling is inline-style objects using `--sd-*` vars — no Tailwind/CSS modules.
 - Names are messy across sources; `buildResolver` does fuzzy matching. "Saurabh Kumar" ≠ "Sourabh Yadav".
 - Snapshots rewrite daily so `.git` grows steadily — accepted.
-- The daily 6 AM refresh needs the Mac **awake**; it runs on next wake otherwise.
+- The daily **11 AM IST** refresh needs the Mac **awake**; it runs on next wake otherwise. This stalled the pipeline for 10 days in Aug 2026 with no visible error.

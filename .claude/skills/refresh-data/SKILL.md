@@ -24,20 +24,39 @@ Cards **11020, 7336, 10453, 10469, 7401, 7753** → `midmarket_incentive.json` (
 Omit `--push` to build without deploying. Repo copies live in `tools/`.
 
 ## Daily auto-refresh
-macOS LaunchAgent **`com.blitzscale.incentive-task-refresh`** runs *both* scripts at **6:00 AM IST**.
+macOS LaunchAgent **`com.blitzscale.incentive-task-refresh`** runs *both* scripts at **11:00 AM IST**
+on the maintainer's Mac (`~/Library/LaunchAgents/`; a copy of the plist is in `tools/` — its paths
+are per-user and must be edited on a new machine).
 - Status: `launchctl list com.blitzscale.incentive-task-refresh` (want `"LastExitStatus" = 0`)
 - Run now: `launchctl kickstart -k gui/$(id -u)/com.blitzscale.incentive-task-refresh`
 - Log: `~/metabase-arr-refresh/incentive_task_refresh.log`
-- Plist (also in `tools/`): `~/Library/LaunchAgents/com.blitzscale.incentive-task-refresh.plist`
-- ⚠️ LaunchAgents don't wake a sleeping Mac — it runs on next wake. For always-on, move to a server/cron.
+- ⚠️ LaunchAgents don't wake a sleeping Mac — it runs on next wake. This silently stalled the
+  pipeline for 10 days (2026-08-07 → 08-17) while the cron "looked" fine. For always-on, move to
+  a server/cron or GitHub Actions.
+
+## ⚠️ BigQuery scan quota — the main operational limit
+The heavy cards are BigQuery-backed behind a **daily scan quota** (`plan: default`, resets
+**00:00 IST**). Card 7336 alone claims ~4.7 GB and 10181 ~880 MB, so **one full refresh very nearly
+exhausts a day's budget** — you get roughly one shot per day.
+- The rejection is an `HTTP 400` whose *body* carries the reason; `req()` prints it as
+  `[http] attempt N: HTTP 400 This query would scan …` and does **not** retry a quota rejection
+  (retrying cannot help and used to mask the original error behind a bare `HTTP Error 400`).
+- **Don't probe these cards to "test" things** — every probe spends budget the real refresh needs.
+- Quota is charged **per Metabase user**. The API key runs as its own pseudo-user on the default
+  plan. `MB_AUTH=session|apikey` selects which identity pays; `session` needs
+  `METABASE_USER_EMAIL` + `METABASE_PASSWORD` in `.mbcreds`.
+- If the 11:00 run finds the budget already spent, it fails outright. Raising the quota needs the
+  team that operates `metabase.kaip.in` — there is **no quota API** in Metabase itself (checked:
+  `/api/quota`, `/api/usage`, `/api/ee/quota` all 404, and nothing in `/api/setting`).
 
 ## Setup on a NEW machine
 1. Clone the repo; `gh auth status` must show write access; run `gh auth setup-git`.
 2. Create `~/metabase-arr-refresh/.mbcreds` (**never commit**):
    ```json
-   {"METABASE_URL":"https://…","METABASE_USER_EMAIL":"…","METABASE_PASSWORD":"…"}
+   {"METABASE_URL":"https://…","METABASE_API_KEY":"mb_…"}
    ```
-   Prefer a Metabase **service account** so it survives staff changes.
+   An **API key is preferred** — it survives staff changes and password rotation, and is what
+   `mb_auth()` picks by default. Email/password still works as a fallback (`MB_AUTH=session`).
 3. `mkdir -p ~/metabase-arr-refresh && cp ~/Incentive-Automation/tools/*.py ~/metabase-arr-refresh/`
 4. Copy `tools/com.blitzscale.incentive-task-refresh.plist` to `~/Library/LaunchAgents/`, **edit the absolute paths for the new user**, then:
    `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.blitzscale.incentive-task-refresh.plist`
