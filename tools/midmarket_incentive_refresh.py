@@ -23,6 +23,20 @@ WINDOW_START_DAY = 20
 CHURN_SPEND = 11800.0          # revenue spend >= ₹11,800 …
 CHURN_IDLE_DAYS = 21           # … then no spend for > 21 days
 
+# Seller → 1k-5k GL overrides, keyed by seller_id.
+#
+# Card 7753's growth_consultant_name is the only usable GL source (growth_lead_name matches
+# 0/252 — see the data-sources skill), but it is '-' for 45 cohort sellers, who are then
+# dropped from ARR target AND achieved entirely. Their HIT2 still counts, because that comes
+# from the HITS-2 handover sheet, so the pool and the ARR gate disagree for those sellers.
+#
+# TEMPORARY. The durable fix is correcting the CRM field that feeds 7753; each entry here is a
+# manual assertion that has to be re-verified. Add only owner-confirmed mappings.
+GL_OVERRIDES = {
+    # Deekshacotton — 7753 GC is '-'; HIT1 2026-05, HIT2 2026-07. Owner-confirmed 2026-08-18.
+    '6924759312afcedf769a73ac': 'Harshita Gupta',
+}
+
 
 def creds():
     """Credentials from env (CI) first, then ~/.mbcreds (local)."""
@@ -135,7 +149,7 @@ def main():
     print(f"[pull] done · daily rows={len(daily)}")
 
     isgood = lambda r: str(r.get('good_seller')).lower() in ('1', 'true', 'yes')
-    gcof = lambda sid: cn((m7753.get(sid) or {}).get('growth_consultant_name'))
+    gcof = lambda sid: GL_OVERRIDES.get(sid) or cn((m7753.get(sid) or {}).get('growth_consultant_name'))
     names = {str(r['seller_id']): (str(r.get('seller_name') or '').strip() or str(r['seller_id'])) for r in master}
 
     # Assigned universe for Spend/Live + go-live: team='HITS', not good_seller, GC is a known GL.
@@ -155,6 +169,20 @@ def main():
               and not isgood(r) and (hm(r) or 0) >= 202510]
 
     cohort_ids = {str(r['seller_id']) for r in cohort}
+
+    # Data health: cohort sellers no GL can be resolved for. They vanish from ARR target and
+    # achieved together, so the ratio still looks clean and nothing flags it — this was known
+    # but unsurfaced. Emitted so the count is visible instead of silently absorbed.
+    unattributed = []
+    for r in cohort:
+        sid = str(r['seller_id'])
+        if assigned.get(sid) or resolve_gl(gcof(sid)):
+            continue
+        unattributed.append({'sid': sid, 'name': names.get(sid) or '',
+                             'gc': str((m7753.get(sid) or {}).get('growth_consultant_name') or ''),
+                             'hit2': str(r.get('hit2')) == '1'})
+    print(f"[health] cohort={len(cohort)} attributed={len(cohort) - len(unattributed)} "
+          f"unattributed={len(unattributed)} (of which hit2={sum(1 for u in unattributed if u['hit2'])})")
 
     def convfriday(r):
         """Conversion Friday from hit2_year_week (earliest = a seller graduates once)."""
@@ -311,6 +339,7 @@ def main():
 
     data = {'generatedAt': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
             'target': TARGET, 'assignedTotal': len(assigned), 'months': out_months,
+            'unattributed': unattributed,
             'cards': {'arrTarget': 11020, 'arr': 7336, 'master': 10453, 'daily': 10469, 'google': 7401, 'map': 7753}}
     json.dump(data, open(OUT, 'w'), separators=(',', ':'))
     print(f"[out] {OUT} ({os.path.getsize(OUT)} bytes) · assigned={len(assigned)}")
