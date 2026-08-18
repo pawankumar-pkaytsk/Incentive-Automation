@@ -1,0 +1,56 @@
+name: refresh-snapshots
+
+# 05:30 UTC = 11:00 AM IST. GitHub often delays scheduled runs by 10-30 min;
+# that is fine here, the BigQuery scan quota resets at 00:00 IST so the whole
+# morning has budget. Only ONE scheduler may run this -- see tools/README note.
+on:
+  schedule:
+    - cron: '30 5 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: incentive-refresh
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Script 1 is cheap (~1 min). Script 2 pulls the 135 MB daily card and
+      # takes ~10 min. Script 2 reads midmarket_data.json, so order matters.
+      - name: Refresh task / revival / GM / 1k-5k roster
+        env:
+          METABASE_URL: ${{ secrets.METABASE_URL }}
+          METABASE_API_KEY: ${{ secrets.METABASE_API_KEY }}
+          REPO_DIR: ${{ github.workspace }}
+        run: python3 tools/incentive_task_refresh.py
+
+      - name: Refresh 1k-5k incentive engine
+        env:
+          METABASE_URL: ${{ secrets.METABASE_URL }}
+          METABASE_API_KEY: ${{ secrets.METABASE_API_KEY }}
+          REPO_DIR: ${{ github.workspace }}
+        run: python3 tools/midmarket_incentive_refresh.py
+
+      - name: Commit and push snapshots
+        run: |
+          git config user.name  "incentive-refresh[bot]"
+          git config user.email "incentive-refresh@users.noreply.github.com"
+          git add task_data.json revival_data.json gm_mapping.json \
+                  midmarket_data.json midmarket_incentive.json
+          if git diff --cached --quiet; then
+            echo "no snapshot changes"; exit 0
+          fi
+          git commit -m "Refresh all snapshots ($(date -u +%Y-%m-%d))"
+          git pull --rebase --autostash origin main
+          git push origin main
