@@ -47,12 +47,18 @@ def mb_auth():
     c = creds()
     url = c['METABASE_URL'].rstrip('/')
     key = (c.get('METABASE_API_KEY') or '').strip()
-    if key:
+    email, pw = (c.get('METABASE_USER_EMAIL') or '').strip(), c.get('METABASE_PASSWORD') or ''
+    # See incentive_task_refresh.py — BigQuery scan quota is charged per Metabase user.
+    mode = (os.environ.get('MB_AUTH') or '').strip().lower()
+    if mode not in ('session', 'apikey'):
+        mode = 'apikey' if key else 'session'
+    if mode == 'apikey':
+        if not key:
+            raise SystemExit("[auth] MB_AUTH=apikey but no METABASE_API_KEY in .mbcreds")
         print("[auth] using METABASE_API_KEY")
         return url, {'Content-Type': 'application/json', 'x-api-key': key}
-    email, pw = (c.get('METABASE_USER_EMAIL') or '').strip(), c.get('METABASE_PASSWORD') or ''
     if not (email and pw):
-        raise SystemExit("[auth] no METABASE_API_KEY and no email/password in .mbcreds")
+        raise SystemExit("[auth] MB_AUTH=session needs METABASE_USER_EMAIL + METABASE_PASSWORD in .mbcreds")
     print(f"[auth] using session for {email}")
     tok = req(url + "/api/session", 'POST', {"username": email, "password": pw},
               {'Content-Type': 'application/json'})['id']
