@@ -621,6 +621,22 @@
       RAW.mmInc = ij || null;
       I.MMINC_META = ij ? { generatedAt: ij.generatedAt, assigned: ij.assignedTotal, target: ij.target } : null;
     } catch (e) { RAW.mmInc = null; I.MMINC_META = null; }
+    // Snapshot freshness. The refresh pipeline has failed silently before (10 days in
+    // Aug 2026: the LaunchAgent never fired and the site kept serving old snapshots with
+    // no visible signal). Expose the age of the OLDEST snapshot so a stalled refresh is
+    // obvious within a day. Left undefined for the seeded sample data, where it is moot.
+    (() => {
+      const ages = [I.TASK_META, I.REVIVAL_META, I.GMMAP_META, I.MIDMARKET_META, I.MMINC_META]
+        .filter((m) => m && m.generatedAt)
+        .map((m) => ({ at: m.generatedAt, ms: Date.now() - Date.parse(m.generatedAt) }))
+        .filter((x) => isFinite(x.ms));
+      if (!ages.length) { I.SNAP_FRESH = { hours: null, oldest: null, stale: true }; return; }
+      const worst = ages.reduce((a, b) => (b.ms > a.ms ? b : a));
+      const hours = Math.floor(worst.ms / 3.6e6);
+      // 36h, not 24h: the job runs once daily and GitHub delays cron by up to ~30 min,
+      // so a 24h threshold would false-alarm every morning.
+      I.SNAP_FRESH = { hours, oldest: worst.at, stale: hours >= 36, partial: ages.length < 5 };
+    })();
     say('Calculating incentives…');
     const { people, MONTHS } = computeAll(RAW);
     if (!people.length) throw new Error('People sheet returned no rows');

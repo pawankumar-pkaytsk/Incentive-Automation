@@ -167,7 +167,17 @@ const AppHeader = ({ user, onHome, onLogout, activeKey, onPeriodChange, onOpenSo
       <button onClick={onHome || undefined} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: onHome ? 'pointer' : 'default', padding: 0 }}>
         <img src="shopdeck-mark.svg" alt="" style={{ width: 26, height: 26 }} />
         <span style={{ font: '700 16px/1 var(--sd-font-sans)', letterSpacing: -0.2, color: 'var(--sd-heading)' }}>Incentives</span>
-        <span style={{ background: 'var(--sd-accent-1)', color: 'var(--sd-primary)', fontSize: 10, fontWeight: 700, letterSpacing: 0.4, padding: '3px 7px', borderRadius: 5 }}>LIVE</span>
+        {(() => {
+          const f = I.SNAP_FRESH;                       // undefined for sample data
+          const base = { fontSize: 10, fontWeight: 700, letterSpacing: 0.4, padding: '3px 7px', borderRadius: 5 };
+          if (!f || !f.stale) return <span style={{ ...base, background: 'var(--sd-accent-1)', color: 'var(--sd-primary)' }}>LIVE</span>;
+          const label = f.hours == null ? 'NO DATA'
+            : f.hours >= 48 ? Math.floor(f.hours / 24) + 'd OLD' : f.hours + 'h OLD';
+          const tip = f.oldest
+            ? 'Snapshots last refreshed ' + new Date(f.oldest).toLocaleString() + '. The daily Metabase refresh may have failed — figures below are not current.'
+            : 'Metabase snapshots did not load. Figures below are not current.';
+          return <span title={tip} style={{ ...base, background: 'var(--sd-red-500)', color: '#fff' }}>{label}</span>;
+        })()}
       </button>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
         {user.pip && user.pip.flagged ? (
