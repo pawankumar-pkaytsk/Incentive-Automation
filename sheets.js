@@ -293,6 +293,24 @@
       const sid = String(r[c.sellerId] || '').trim(), glName = String(r[c.glName] || '').trim();
       if (sid && glName && !hits2GLBySeller[sid]) hits2GLBySeller[sid] = glName;
     });
+    // DIAGNOSTIC ONLY — changes no attribution. hitDate (col B) and the handover flag (col I)
+    // are mapped in SHEETS but read nowhere, so the loop above keeps the FIRST row per seller:
+    // a seller re-handed-over to a new GL stays credited to the old one, and rows count even
+    // when handover is not TRUE (contradicting the comment above and the incentive-logic skill).
+    // Record every seller whose rows disagree so the blast radius is measurable BEFORE changing
+    // precedence. Inspect with: INCENTIVE.HITS2_CONFLICTS
+    I.HITS2_CONFLICTS = (() => {
+      const c = SHEETS.hits2.col, by = {};
+      row('hits2').forEach((r, i) => {
+        const sid = String(r[c.sellerId] || '').trim(), gl = String(r[c.glName] || '').trim();
+        if (!sid || !gl) return;
+        (by[sid] || (by[sid] = [])).push({ row: i + 2, gl, date: String(r[c.hitDate] || ''),
+                                          handover: String(r[c.handover] || '') });
+      });
+      return Object.keys(by)
+        .filter((sid) => new Set(by[sid].map((x) => x.gl)).size > 1)
+        .map((sid) => ({ sid, credited: hits2GLBySeller[sid], rows: by[sid] }));
+    })();
     // HIT2 achieved per GL per period — count from the snapshot (card 10453, calendar month),
     // credited to the GL named in the handover sheet.
     const mmHitsByPM = {};
