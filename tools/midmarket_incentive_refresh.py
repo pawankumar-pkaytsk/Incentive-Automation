@@ -25,6 +25,11 @@ CHURN_IDLE_DAYS = 21           # … then no spend for > 21 days
 
 
 def creds():
+    """Credentials from env (CI) first, then ~/.mbcreds (local)."""
+    if os.environ.get('METABASE_URL'):
+        return {k: os.environ[k] for k in
+                ('METABASE_URL', 'METABASE_USER_EMAIL', 'METABASE_PASSWORD', 'METABASE_API_KEY')
+                if os.environ.get(k)}
     return json.load(open(CRED))
 
 
