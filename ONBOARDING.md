@@ -10,7 +10,7 @@ Everything needed to run, change, deploy and debug this app. Read this once, the
 A single-page app showing live sales-incentive calculations for ShopDeck's HITS teams. **No build step, no backend.** Plain `<script>` tags + in-browser Babel. Users sign in with their company Google account; sheets are read with **their own** OAuth token, and Metabase data arrives as committed JSON snapshots. Everything computes client-side.
 
 - **Live:** https://hits-incentive.xyz
-- **Repo:** https://github.com/pawankumar-pkaytsk/Incentive-Automation (**public**, GitHub Pages, `main`, root)
+- **Repo:** https://github.com/pratyushboppana-shopdeck/Incentive-Automation (**public**, GitHub Pages, `main`, root)
 - **Hosting:** GitHub Pages + GoDaddy DNS. `CNAME` binds the domain — **never delete it**.
 - Everything hangs off one global: `window.INCENTIVE` (alias `I`).
 

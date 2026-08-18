@@ -23,16 +23,19 @@ Cards **11020, 7336, 10453, 10469, 7401, 7753** → `midmarket_incentive.json` (
 
 Omit `--push` to build without deploying. Repo copies live in `tools/`.
 
-## Daily auto-refresh
-macOS LaunchAgent **`com.blitzscale.incentive-task-refresh`** runs *both* scripts at **11:00 AM IST**
-on the maintainer's Mac (`~/Library/LaunchAgents/`; a copy of the plist is in `tools/` — its paths
-are per-user and must be edited on a new machine).
-- Status: `launchctl list com.blitzscale.incentive-task-refresh` (want `"LastExitStatus" = 0`)
-- Run now: `launchctl kickstart -k gui/$(id -u)/com.blitzscale.incentive-task-refresh`
-- Log: `~/metabase-arr-refresh/incentive_task_refresh.log`
-- ⚠️ LaunchAgents don't wake a sleeping Mac — it runs on next wake. This silently stalled the
-  pipeline for 10 days (2026-08-07 → 08-17) while the cron "looked" fine. For always-on, move to
-  a server/cron or GitHub Actions.
+## Daily auto-refresh — GitHub Actions
+**`.github/workflows/refresh.yml`** runs *both* scripts at **05:30 UTC (11:00 AM IST)** plus
+`workflow_dispatch`, then commits the snapshots and lets Pages redeploy. Credentials come from repo
+secrets `METABASE_URL` / `METABASE_API_KEY`.
+```bash
+gh workflow run refresh.yml -R pratyushboppana-shopdeck/Incentive-Automation
+gh run list --workflow=refresh.yml -L5
+```
+This **replaced** the macOS LaunchAgent `com.blitzscale.incentive-task-refresh`, which only fired if
+one maintainer's Mac happened to be awake — it silently stalled the pipeline for 10 days
+(2026-08-07 → 08-17) while reporting no error. The plist is retained in `tools/` for reference only;
+if you ever re-enable it, **unload the other scheduler first** — the scan quota (below) allows about
+one full refresh per day, so two schedulers starve each other.
 
 ## ⚠️ BigQuery scan quota — the main operational limit
 The heavy cards are BigQuery-backed behind a **daily scan quota** (`plan: default`, resets

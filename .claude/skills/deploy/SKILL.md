@@ -5,7 +5,7 @@ description: Deploy a change to the HITS Incentive app (hits-incentive.xyz) — 
 
 # Deploy the HITS Incentive app
 
-No-build static site on **GitHub Pages** (`pawankumar-pkaytsk/Incentive-Automation`, `main`, root) → **https://hits-incentive.xyz**. Push to `main` → live in ~1–2 min.
+No-build static site on **GitHub Pages** (`pratyushboppana-shopdeck/Incentive-Automation`, `main`, root) → **https://hits-incentive.xyz**. Push to `main` → live in ~1–2 min.
 
 ## The loop
 1. Edit files in `~/Incentive-Automation`.
@@ -15,7 +15,7 @@ No-build static site on **GitHub Pages** (`pawankumar-pkaytsk/Incentive-Automati
    (`.jsx` can't be node-checked — verify via `Babel.transform` in the browser, see below.)
 5. **⚠️ BUMP THE CACHE-BUST** — every local asset in `index.html` is `foo.js?v=YYYYMMDDx`. Bump the shared value on **any** JS/CSS change:
    ```bash
-   sed -i '' 's/?v=20260729j/?v=20260730a/g' index.html
+   sed -i '' 's/?v=20260818a/?v=20260819a/g' index.html
    ```
    Pages serves these with `max-age=600`; without a bump users run stale code for up to 10 min. This has repeatedly looked like "the fix didn't work". CDN libs are already version-pinned — leave them.
 6. Commit + push:
@@ -23,7 +23,18 @@ No-build static site on **GitHub Pages** (`pawankumar-pkaytsk/Incentive-Automati
    git add -A && git commit -m "…" && git push origin main
    ```
    End commit messages with `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
-7. Wait ~1–2 min, hard-refresh (**Cmd+Shift+R**). The first load after a bump still needs one hard refresh because `index.html` itself is cached ~10 min; after that new deploys propagate on their own.
+7. Wait ~1–2 min, hard-refresh (**Cmd+Shift+R**).
+
+**⚠️ Don't trust `gh api …/pages/builds/latest`.** It reports `errored` for builds that were
+merely *superseded* — push twice in quick succession (or push while the refresh bot commits) and
+the earlier build is cancelled and logged as an error, even though the later one deployed fine.
+Check the real mechanism instead:
+```bash
+gh run list -R pratyushboppana-shopdeck/Incentive-Automation --workflow=pages-build-deployment -L3 \
+  --json conclusion,headSha --jq '.[] | "\(.conclusion) \(.headSha[0:8])"'
+gh api repos/pratyushboppana-shopdeck/Incentive-Automation/deployments --jq '.[0].sha[0:8]'
+```
+Or just verify the artefact itself — see below. The first load after a bump still needs one hard refresh because `index.html` itself is cached ~10 min; after that new deploys propagate on their own.
 
 ## Verifying before you push
 Google sign-in **doesn't work on localhost** (origin not authorised), so you can't see live data locally. Instead:
