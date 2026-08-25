@@ -132,17 +132,65 @@
   const norm = (s) => String(s == null ? '' : s).replace(/[\u00a0\u200b\u200c\u200d]/g, ' ').toLowerCase().replace(/[._]/g, ' ').replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
   const toks = (s) => norm(s).split(' ').filter(Boolean);
   function buildResolver(people) {
-    const exact = {}, fl = {}, fi = {};
-    people.forEach((p) => { const t = toks(p.name); if (!t.length) return; exact[t.join(' ')] = p; const f = t[0], l = t[t.length - 1]; fl[f + '|' + l] = p; fi[f + '|' + l[0]] = p; });
-    const cache = {};
-    return (name) => {
-      const k = norm(name); if (!k) return null; if (cache[k] !== undefined) return cache[k];
-      let res = null; const t = toks(name);
-      if (exact[k]) res = exact[k];
-      else if (t.length) { const f = t[0], l = t[t.length - 1]; if (fl[f + '|' + l]) res = fl[f + '|' + l]; else if (fi[f + '|' + l[0]]) res = fi[f + '|' + l[0]]; else { let best = null; people.forEach((p) => { const pt = toks(p.name); if (!pt.length || pt[0] !== f) return; const sub = t.slice(1).every((x) => pt.indexOf(x) >= 0) || pt.slice(1).every((x) => t.indexOf(x) >= 0); if (sub || pt[pt.length - 1][0] === l[0]) best = p; }); res = best; } }
-      cache[k] = res; return res;
+    const exact = {}, fl = {}, fi = {}, compact = {}, entries = [];
+    people.forEach((p) => { const t = toks(p.name); if (!t.length) return; exact[t.join(' ')] = p; const f = t[0], l = t[t.length - 1]; fl[f + '|' + l] = p; fi[f + '|' + l[0]] = p;
+      const ck = t.join(''); (compact[ck] || (compact[ck] = [])).push(p); entries.push({ p: p, set: new Set(t) }); });
+    const subset = (a, b) => { let ok = true; a.forEach((x) => { if (!b.has(x)) ok = false; }); return ok; };
+    // Audit of every name lookup, so a miss is visible instead of silently dropping the row.
+    // Exposed as INCENTIVE.NAME_AUDIT and rendered in the Data sources panel.
+    const audit = { unresolved: {}, ambiguous: {}, riskyPicks: {}, byTier: {} };
+    const note = (bucket, k, src, cands) => {
+      const e = bucket[k] || (bucket[k] = { name: k, total: 0, sources: {}, candidates: cands || null });
+      e.total++; if (src) e.sources[src] = (e.sources[src] || 0) + 1; return e;
     };
+    const decide = (name) => {
+      const k = norm(name), t = toks(name);
+      if (exact[k]) return { p: exact[k], tier: 'exact' };
+      if (t.length) {
+        const f = t[0], l = t[t.length - 1];
+        if (fl[f + '|' + l]) return { p: fl[f + '|' + l], tier: 'first+last' };
+        if (fi[f + '|' + l[0]]) return { p: fi[f + '|' + l[0]], tier: 'first+initial' };
+        let best = null; const anchored = [];
+        people.forEach((p) => { const pt = toks(p.name); if (!pt.length || pt[0] !== f) return; const sub = t.slice(1).every((x) => pt.indexOf(x) >= 0) || pt.slice(1).every((x) => t.indexOf(x) >= 0); if (sub || pt[pt.length - 1][0] === l[0]) { best = p; anchored.push(p.name); } });
+        // This tier has always kept the LAST candidate when several match, with no ambiguity
+        // check — a bare "Rahul" silently lands on whichever Rahul happens to sort last.
+        // Behaviour is left exactly as-is (changing it would move payouts), but the guess is
+        // now recorded so it can be reviewed instead of trusted.
+        if (best) return { p: best, tier: 'first-anchored', risky: anchored.length > 1 ? anchored : null };
+        // --- tiers below are NEW and run only where the four above returned null, so no
+        // previously-resolving name can change. Every tier above anchors on the FIRST
+        // token, which is why a roster name carrying an extra leading token ("Desai Yash
+        // Sureshbhai" against a sheet's "Yash Sureshbhai") never matched and the row was
+        // dropped without a trace.
+        const ck = t.join('');                       // ignore spacing: "Ameen AR" == "Ameen A R"
+        const cm = compact[ck] || [];
+        if (cm.length === 1) return { p: cm[0], tier: 'compact' };
+        if (cm.length > 1) return { p: null, tier: 'ambiguous', cands: cm.map((x) => x.name) };
+        const q = new Set(t);                        // order-insensitive containment, either direction
+        const hits = entries.filter((e) => subset(q, e.set) || subset(e.set, q));
+        // Uniqueness guard: this roster holds Rahul Saini / Jangid / Anand / Sharma /
+        // Kumar Mallick. Guessing among them would misattribute someone's HITs silently,
+        // which is worse than a visible miss — so refuse and report instead.
+        if (hits.length === 1) return { p: hits[0].p, tier: 'contains' };
+        if (hits.length > 1) return { p: null, tier: 'ambiguous', cands: hits.map((h) => h.p.name) };
+      }
+      return { p: null, tier: 'none' };
+    };
+    const decided = {};
+    const fn = (name, src) => {
+      const k = norm(name); if (!k) return null;
+      const r = decided[k] || (decided[k] = decide(name));
+      if (r.p) {
+        audit.byTier[r.tier] = (audit.byTier[r.tier] || 0) + 1;
+        if (r.risky) note(audit.riskyPicks, k, src, r.risky).picked = r.p.name;
+      } else note(r.tier === 'ambiguous' ? audit.ambiguous : audit.unresolved, k, src, r.cands);
+      return r.p;
+    };
+    fn.audit = audit;
+    return fn;
   }
+  I._buildResolver = buildResolver;   // module scope: available before sign-in, for testing the matcher
+
 
   /* ---- Compute everyone from raw rows -------------------------------- */
   function computeAll(RAW) {
@@ -157,6 +205,8 @@
     const byEmpId = {}; people.forEach((p) => { if (p.empId) byEmpId[p.empId] = p; });
     people.forEach((p) => { if (p.managerEmail && byEmail[p.managerEmail]) byEmail[p.managerEmail].reports.push(p); });
     const resolve = buildResolver(people);
+    // Live reference — the audit fills in as the sheets below are walked.
+    I.NAME_AUDIT = resolve.audit;
     // Revival GCs are DEFINED by card 11911 — every submitter is a Revival GC. Resolve each
     // to the roster (forcing them onto the revival team so they never appear elsewhere); and
     // SYNTHESIZE a person for any submitter missing from the People sheet, so every revival GC
@@ -166,7 +216,7 @@
     row('revivals').forEach((rv) => {
       const nm = String(rv.gc || '').trim(); if (!nm) return;
       const k = rvNorm(nm); if (subSeen[k]) { return; } subSeen[k] = true;
-      let who = resolve(nm);
+      let who = resolve(nm, 'GM mapping (card 12101)');
       if (!who) { who = { empId: '', name: nm, email: 'revival|' + k, managerEmail: '', teamRaw: 'Revenue', designation: 'Revival GC', byMonth: {}, reports: [], synthetic: true }; people.push(who); byEmail[who.email] = who; }
       revivalGCs[who.email] = true; revivalPersonByName[k] = who;
     });
@@ -188,7 +238,7 @@
     const campaignByEmail = {}, campaignSet = {};
     CAMPAIGN_W0.forEach((e) => {
       const k = campNorm(e.name);
-      let who = resolve(e.name);
+      let who = resolve(e.name, 'revival log');
       if (!who) { who = { empId: '', name: e.name, email: 'campaign|' + k, managerEmail: '', teamRaw: 'Campaign', designation: 'Campaign GC', byMonth: {}, reports: [], synthetic: true }; people.push(who); byEmail[who.email] = who; }
       campaignSet[who.email] = true; campaignByEmail[who.email] = e;
     });
@@ -238,10 +288,10 @@
     // 3-week + hits master + targets
     const threeWeek = {}; row('threeweek').forEach((r) => { const id = String(r[SHEETS.threeweek.col.sellerId]).trim(); if (id) threeWeek[id] = true; });
     const hm = {}; row('hitsmaster').forEach((r) => { const c = SHEETS.hitsmaster.col; const id = String(r[c.sellerId]).trim(); if (id) hm[id] = { name: String(r[c.sellerName] || '').trim(), month: monthNum(r[c.month]), year: Number(r[c.year]) }; });
-    const targets = {}; row('target').forEach((r) => { const c = SHEETS.target.col; const who = resolve(r[c.name]); if (!who) return; targets[who.email + '|' + monthNum(r[c.month]) + '|' + Number(r[c.year])] = { target: Number(r[c.target]) || 0 }; });
+    const targets = {}; row('target').forEach((r) => { const c = SHEETS.target.col; const who = resolve(r[c.name], 'target sheet'); if (!who) return; targets[who.email + '|' + monthNum(r[c.month]) + '|' + Number(r[c.year])] = { target: Number(r[c.target]) || 0 }; });
 
     // spend/live
-    const spendByPM = {}; row('spend').forEach((r) => { const c = SHEETS.spend.col; const who = resolve(r[c.gcName]); if (!who) return; const d = toDate(r[c.date]); if (!d) return; const live = Number(r[c.live]) || 0, sp = Number(r[c.spend]) || 0; MONTHS.forEach((m) => { if (!inWindow(d, windowFor(m.month, m.year))) return; const key = who.email + '|' + m.key; const rec = spendByPM[key] || (spendByPM[key] = { sumLive: 0, sumSpend: 0, days: [] }); rec.sumLive += live; rec.sumSpend += sp; rec.days.push({ date: fmtDate(d), live: live, spend: sp, ratio: live > 0 ? +(sp / live * 100).toFixed(1) : null }); }); });
+    const spendByPM = {}; row('spend').forEach((r) => { const c = SHEETS.spend.col; const who = resolve(r[c.gcName], 'spend sheet'); if (!who) return; const d = toDate(r[c.date]); if (!d) return; const live = Number(r[c.live]) || 0, sp = Number(r[c.spend]) || 0; MONTHS.forEach((m) => { if (!inWindow(d, windowFor(m.month, m.year))) return; const key = who.email + '|' + m.key; const rec = spendByPM[key] || (spendByPM[key] = { sumLive: 0, sumSpend: 0, days: [] }); rec.sumLive += live; rec.sumSpend += sp; rec.days.push({ date: fmtDate(d), live: live, spend: sp, ratio: live > 0 ? +(sp / live * 100).toFixed(1) : null }); }); });
 
     // task + callback — sourced from the Metabase snapshot (task_data.json, card 10181),
     // each entry: { st:sub_type, gc:assignee_name, status, cr:created(YYYY-MM-DD), sla:sla_in_min, tat }.
@@ -249,7 +299,7 @@
     // tasks that are done AND on time (tat <= sla_in_min) ÷ total schedule_call tasks.
     const taskByPM = {}, callByPM = {}; const bucket = (s, k) => s[k] || (s[k] = { done: 0, total: 0, rows: [] });
     row('tasks').forEach((t) => {
-      const who = resolve(t.gc); if (!who) return;
+      const who = resolve(t.gc, '1k-5k target'); if (!who) return;
       const d = toDate(t.cr); if (!d) return;
       const sub = String(t.st || '').trim().toLowerCase();
       const stt = String(t.status || '').trim().toLowerCase();
@@ -278,10 +328,10 @@
     // SOS → WES (dedupe same seller/day/type)
     const wesByPM = {}, seen = {};
     const wesW = (t) => { t = String(t || '').toLowerCase(); for (const w of WES_W) if (t.indexOf(w.m) >= 0) return w; return null; };
-    row('sos').forEach((r) => { const c = SHEETS.sos.col; const who = resolve(r[c.gcName]); if (!who) return; const d = toDate(r[c.date]); if (!d) return; const ww = wesW(r[c.type]); if (!ww) return; const sid = String(r[c.sellerId] || '').trim(); MONTHS.forEach((m) => { if (!inWindow(d, windowFor(m.month, m.year))) return; const dk = who.email + '|' + m.key + '|' + ww.m + '|' + sid + '|' + fmtDate(d); if (seen[dk]) return; seen[dk] = true; const key = who.email + '|' + m.key; const rec = wesByPM[key] || (wesByPM[key] = { social: 0, sos: 0, internal: 0, rows: [] }); if (ww.m === 'social') rec.social++; else if (ww.m === 'sos') rec.sos++; else rec.internal++; rec.rows.push({ date: fmtDate(d), type: String(r[c.type]).trim(), sellerId: sid, weight: ww.w }); }); });
+    row('sos').forEach((r) => { const c = SHEETS.sos.col; const who = resolve(r[c.gcName], 'sos sheet'); if (!who) return; const d = toDate(r[c.date]); if (!d) return; const ww = wesW(r[c.type]); if (!ww) return; const sid = String(r[c.sellerId] || '').trim(); MONTHS.forEach((m) => { if (!inWindow(d, windowFor(m.month, m.year))) return; const dk = who.email + '|' + m.key + '|' + ww.m + '|' + sid + '|' + fmtDate(d); if (seen[dk]) return; seen[dk] = true; const key = who.email + '|' + m.key; const rec = wesByPM[key] || (wesByPM[key] = { social: 0, sos: 0, internal: 0, rows: [] }); if (ww.m === 'social') rec.social++; else if (ww.m === 'sos') rec.sos++; else rec.internal++; rec.rows.push({ date: fmtDate(d), type: String(r[c.type]).trim(), sellerId: sid, weight: ww.w }); }); });
 
     // KAE strikes (by Emp ID)
-    const strikesByPM = {}; row('strikes').forEach((r) => { const c = SHEETS.strikes.col; const d = toDate(r[c.date]); if (!d) return; const who = byEmpId[String(r[c.kaeEmpId] || '').trim()] || resolve(r[c.kaeName]); if (!who) return; MONTHS.forEach((m) => { if (!inWindow(d, windowFor(m.month, m.year))) return; (strikesByPM[who.empId + '|' + m.key] || (strikesByPM[who.empId + '|' + m.key] = [])).push({ date: fmtDate(d), issue: String(r[c.issue] || '').trim() }); }); });
+    const strikesByPM = {}; row('strikes').forEach((r) => { const c = SHEETS.strikes.col; const d = toDate(r[c.date]); if (!d) return; const who = byEmpId[String(r[c.kaeEmpId] || '').trim()] || resolve(r[c.kaeName], 'strikes sheet'); if (!who) return; MONTHS.forEach((m) => { if (!inWindow(d, windowFor(m.month, m.year))) return; (strikesByPM[who.empId + '|' + m.key] || (strikesByPM[who.empId + '|' + m.key] = [])).push({ date: fmtDate(d), issue: String(r[c.issue] || '').trim() }); }); });
 
     // HITS-2 handover sheet → 1k-5k GL hits. A row counts as a hit for the GL named in col E
     // only when the handover status (col I) is TRUE. Bucketed into the 20th→19th cycle by HIT date.
@@ -318,7 +368,7 @@
     Object.keys(mmInc).forEach((pkey) => {
       (mmInc[pkey].hit2 || []).forEach((h) => {
         const glName = hits2GLBySeller[h.sid]; if (!glName) return;
-        const who = mmPersonByName[campNorm(glName)] || resolve(glName); if (!who) return;
+        const who = mmPersonByName[campNorm(glName)] || resolve(glName, 'HITS-2 handover sheet'); if (!who) return;
         const k = who.email + '|' + pkey;
         const store = mmHitsByPM[k] || (mmHitsByPM[k] = { count: 0, rows: [] });
         store.count++;
@@ -332,7 +382,7 @@
     // blank month records + handover attribution
     people.forEach((p) => MONTHS.forEach((m) => p.byMonth[m.key] = { key: m.key, label: m.label, month: m.month, year: m.year, counted: [], disposed: [] }));
     const gmHits = {}; // gmEmail|monthKey -> [{sellerId, sellerName, threeWeek}] (col F = GM)
-    row('handover').forEach((r) => { const c = SHEETS.handover.col; const sid = String(r[c.sellerId]).trim(); const gc = resolve(r[c.gcName]); const master = hm[sid]; if (!master) return; const mObj = MONTHS.find((m) => m.month === master.month && m.year === master.year); if (!mObj) return; const is3w = !!threeWeek[sid]; const ho = String(r[c.handover]).toUpperCase() === 'TRUE' || r[c.handover] === true; const rr = { sellerId: sid, sellerName: master.name, hitMonthName: mObj.label.split(' ')[0], hitYear: master.year, threeWeek: is3w, handover: ho }; if (gc) { if (ho) gc.byMonth[mObj.key].counted.push(rr); else gc.byMonth[mObj.key].disposed.push(rr); } if (ho) { const gm = resolve(r[c.gmName]); if (gm) { const k = gm.email + '|' + mObj.key; (gmHits[k] || (gmHits[k] = [])).push({ sellerId: sid, sellerName: master.name, hitMonthName: mObj.label.split(' ')[0], hitYear: master.year, threeWeek: is3w }); } } });
+    row('handover').forEach((r) => { const c = SHEETS.handover.col; const sid = String(r[c.sellerId]).trim(); const gc = resolve(r[c.gcName], 'handover sheet (GC)'); const master = hm[sid]; if (!master) return; const mObj = MONTHS.find((m) => m.month === master.month && m.year === master.year); if (!mObj) return; const is3w = !!threeWeek[sid]; const ho = String(r[c.handover]).toUpperCase() === 'TRUE' || r[c.handover] === true; const rr = { sellerId: sid, sellerName: master.name, hitMonthName: mObj.label.split(' ')[0], hitYear: master.year, threeWeek: is3w, handover: ho }; if (gc) { if (ho) gc.byMonth[mObj.key].counted.push(rr); else gc.byMonth[mObj.key].disposed.push(rr); } if (ho) { const gm = resolve(r[c.gmName], 'handover sheet (GM)'); if (gm) { const k = gm.email + '|' + mObj.key; (gmHits[k] || (gmHits[k] = [])).push({ sellerId: sid, sellerName: master.name, hitMonthName: mObj.label.split(' ')[0], hitYear: master.year, threeWeek: is3w }); } } });
 
     // finalise each month per person
     people.forEach((p) => MONTHS.forEach((m) => {

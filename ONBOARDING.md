@@ -89,5 +89,8 @@ Edit → **bump `?v=`** → commit → push `main` → live in ~1–2 min → ha
 - New `.jsx` must be registered in `index.html` in dependency order.
 - Styling is inline-style objects using `--sd-*` vars — no Tailwind/CSS modules.
 - Names are messy across sources; `buildResolver` does fuzzy matching. "Saurabh Kumar" ≠ "Sourabh Yadav".
+  All ten sheet lookups are **by name**, and a miss drops the row silently — check
+  `INCENTIVE.NAME_AUDIT` or the Data sources panel, which now lists every unresolved, ambiguous and
+  ambiguously-matched name with its source sheet. See `troubleshoot-data` §2b.
 - Snapshots rewrite daily so `.git` grows steadily — accepted.
 - The daily **11 AM IST** refresh needs the Mac **awake**; it runs on next wake otherwise. This stalled the pipeline for 10 days in Aug 2026 with no visible error.

@@ -20,6 +20,42 @@ Team membership comes from **cards, not the People sheet**:
 - **1k-5k is per-period**: a GL appears in a month only if they're in card 12100 *or* have a target row for that month. Missing in one month but present in another is expected.
 - Missing from the roster entirely? Revival and 1k-5k **synthesize** absent people; Core/GM need a People-sheet row.
 
+## 2b. "Data missing" / 0 HITs for ONE person — check name resolution FIRST
+
+Every sheet lookup is by **name**, not email: target, handover (GC *and* GM columns), spend, sos,
+strikes, revival log, HITS-2 handover, and the card-12100 1k-5k targets — ten call sites. A name that
+fails to match a roster person **drops the row silently**. A missing target renders as "Data missing";
+missing handover rows render as 0 HITs. Nothing else indicates a problem.
+
+**Real case:** the target sheet said `Yash Sureshbhai`; the roster says `Desai Yash Sureshbhai`. Every
+matcher tier anchors on the **first token**, so a roster name carrying an extra *leading* token never
+matched and a GM's target of 13 was dropped. Meanwhile his GC list and ops multiplier computed fine —
+because those come from card 12101 keyed by **email**. That split (email paths work, name paths fail)
+is the signature of this bug.
+
+**Diagnose it in one step — open the Data sources panel.** Unresolved names are listed there with the
+sheet each came from. Or in the console:
+
+```js
+INCENTIVE.NAME_AUDIT      // { unresolved, ambiguous, riskyPicks, byTier }
+```
+
+- **unresolved** — no roster match; every row using this name was dropped
+- **ambiguous** — matched several people, so the matcher refused rather than guess
+- **riskyPicks** — ⚠️ matched, but several people fit and the matcher kept the *last* one. A bare
+  `Rahul` lands on whichever Rahul sorts last out of five. Credit may be on the wrong person.
+
+**Fix in the sheet, not the code** — make the spelling match the People sheet exactly. These sheets
+are read live, so it takes effect on the next page load.
+
+### Matcher tiers (`buildResolver`)
+`exact` → `first+last` → `first+initial` → `first-anchored` → `compact` → `contains`.
+
+The last two are the safety net: `compact` ignores spacing (`Ameen AR` = `Ameen A R`); `contains`
+does order-insensitive token containment, which is what catches a leading surname. **Both accept only
+a unique match** — this roster holds five Rahuls and two Rohits, and a wrong silent match is worse
+than a visible miss. Do NOT loosen this without the uniqueness guard.
+
 ## 3. A metric reads 0 for everyone
 Almost always an **attribution** break, not a maths bug:
 - **HIT2 = 0 for all GLs** → something is crediting via card **7753**, which blanks post-move. Must use the **HITS-2 handover sheet**.

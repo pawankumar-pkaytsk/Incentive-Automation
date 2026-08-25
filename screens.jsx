@@ -200,6 +200,66 @@ const AppHeader = ({ user, onHome, onLogout, activeKey, onPeriodChange, onOpenSo
   );
 };
 
+/* ---- Unresolved sheet names ----------------------------------------
+   Every sheet lookup is by NAME, and a name that fails to match a roster person
+   silently drops the row: a missing HIT target reads as "Data missing", missing
+   handover rows read as 0 HITs. That is how "Yash Sureshbhai" in the target sheet
+   never reached "Desai Yash Sureshbhai" in the roster. This surfaces the misses so
+   they are fixed in the sheet rather than rediscovered one person at a time. */
+const NameAudit = () => {
+  const I = window.INCENTIVE;
+  const a = I.NAME_AUDIT;
+  if (!a) return null;
+  const un = Object.values(a.unresolved || {}).sort((x, y) => y.total - x.total);
+  const am = Object.values(a.ambiguous || {}).sort((x, y) => y.total - x.total);
+  const rk = Object.values(a.riskyPicks || {}).sort((x, y) => y.total - x.total);
+  if (!un.length && !am.length && !rk.length) return null;
+  const Row = ({ e, amb }) => (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '6px 0', borderTop: '1px solid var(--sd-stroke)' }}>
+      <span style={{ font: '600 12px/1.4 var(--sd-font-mono)', color: 'var(--sd-heading)', minWidth: 170 }}>{e.name}</span>
+      <span style={{ font: '400 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-3)', flex: 1 }}>
+        {Object.keys(e.sources).map((k) => `${k} (${e.sources[k]})`).join(' · ') || '—'}
+        {amb && e.candidates ? ` — could be: ${e.candidates.join(', ')}` : ''}
+      </span>
+    </div>
+  );
+  return (
+    <div style={{ padding: 14, borderRadius: 'var(--sd-radius-md)', border: '1px solid var(--sd-red-500)', background: 'rgba(244,67,54,0.06)', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <Icon name="flag" size={15} style={{ color: 'var(--sd-red-500)' }} />
+        <span style={{ font: '700 13px/1 var(--sd-font-sans)', color: 'var(--sd-heading)' }}>
+          {un.length + am.length} sheet name{un.length + am.length === 1 ? '' : 's'} did not match anyone in the roster{rk.length ? `, ${rk.length} matched ambiguously` : ''}
+        </span>
+      </div>
+      <div style={{ font: '400 12px/1.5 var(--sd-font-sans)', color: 'var(--sd-fg-2)', marginBottom: 8 }}>
+        Rows using these names are being dropped. Fix by making the sheet spelling match the People sheet exactly.
+      </div>
+      {un.map((e) => <Row key={e.name} e={e} />)}
+      {am.length ? <div style={{ font: '700 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-3)', marginTop: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>Ambiguous — matched more than one person, so refused</div> : null}
+      {am.map((e) => <Row key={e.name} e={e} amb />)}
+      {rk.length ? (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '2px solid var(--sd-stroke)' }}>
+          <div style={{ font: '700 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-3)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 }}>
+            Matched, but more than one person fit — verify these
+          </div>
+          <div style={{ font: '400 12px/1.5 var(--sd-font-sans)', color: 'var(--sd-fg-2)', marginBottom: 4 }}>
+            These resolved to a single person only because the matcher keeps the last candidate. The credit may be on the wrong person.
+          </div>
+          {rk.map((e) => (
+            <div key={e.name} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '6px 0', borderTop: '1px solid var(--sd-stroke)' }}>
+              <span style={{ font: '600 12px/1.4 var(--sd-font-mono)', color: 'var(--sd-heading)', minWidth: 170 }}>{e.name}</span>
+              <span style={{ font: '400 11px/1.4 var(--sd-font-sans)', color: 'var(--sd-fg-3)', flex: 1 }}>
+                credited to <b>{e.picked}</b> · also fits: {(e.candidates || []).filter((c) => c !== e.picked).join(', ')}
+                {' · '}{Object.keys(e.sources).map((k) => `${k} (${e.sources[k]})`).join(' · ')}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 /* ---- Data sources panel (fetch status) ----------------------------- */
 const DataSourcesPanel = () => {
   const I = window.INCENTIVE;
@@ -212,6 +272,7 @@ const DataSourcesPanel = () => {
           This is a <b>self-contained build</b> — no backend / Apps Script. All incentive logic runs in the browser on data bundled with the site. To load real figures, paste each sheet’s rows into <span style={{ font: '500 11px var(--sd-font-mono)' }}>data.js</span>. The sheets below are the source definitions the logic mirrors.
         </div>
       </div>
+      <NameAudit />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {I.DATA_SOURCES.map((s) => (
           <div key={s.fileId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', border: '1px solid var(--sd-stroke)', borderRadius: 'var(--sd-radius-md)' }}>
@@ -295,4 +356,4 @@ const AdminCard = ({ index, onOpen, flaggedCount, pipCount }) => {
   );
 };
 
-Object.assign(window, { Login, AppHeader, TeamCard, AdminCard, GoogleG, DataSourcesPanel });
+Object.assign(window, { Login, AppHeader, TeamCard, AdminCard, GoogleG, DataSourcesPanel, NameAudit });
