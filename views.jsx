@@ -14,9 +14,11 @@ function exportCSV(list, filename) {
     'Input Bands', 'Multiplier', 'Final %',
     'Ad-hoc % (relative)', 'Ad-hoc pp (flat)', 'Ad-hoc Note', 'Final % (with ad-hoc)',
     'Revival Count', 'Revival Band', 'Revival Rate (₹)', 'Incentive Amount (₹)',
+    'ARR Achieved (1k-5k)', 'ARR Target (1k-5k)',
     'PIP Flag', 'PIP Ratio %', 'Data Status', 'Flags',
   ];
   const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const num2 = (v) => (v == null || !isFinite(v)) ? '' : Math.round(v * 100) / 100;
   const rows = list.map((p) => {
     const c = I.cur(p); const mgr = I.byEmail[p.managerEmail]; const fp = I.finalPctWithAdhoc(p);
     return [
@@ -33,6 +35,9 @@ function exportCSV(list, filename) {
       fp == null ? '' : fp.toFixed(2),
       p.logic === 'revival' ? c.revivalCount : '', p.logic === 'revival' && c.revivalBand ? c.revivalBand.label : '', p.logic === 'revival' ? c.revivalRate : '',
       (p.logic === 'revival' || p.logic === 'kae') ? c.amount : '',
+      // 1k-5k ARR for the selected month. Blank for every other team, matching how the
+      // Revival columns above behave. num2() keeps float noise out of the cell.
+      p.logic === 'midmarket' ? num2(c.mmArrAch) : '', p.logic === 'midmarket' ? num2(c.mmArrTarget) : '',
       p.pip.flagged ? 'YES' : 'NO', p.pip.ratio == null ? '' : p.pip.ratio.toFixed(1),
       c.dataHealth, (c.missingFields || []).join('; '),
     ].map(esc).join(',');
