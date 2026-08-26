@@ -50,9 +50,14 @@
   }
   function fmtDate(d) { return d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') : ''; }
   function monthNum(v) { if (typeof v === 'number') return v; const s = String(v).trim(); if (/^\d+$/.test(s)) return +s; const i = MN.findIndex((n) => s.toLowerCase().startsWith(n.toLowerCase())); return i >= 0 ? i + 1 : NaN; }
-  function windowFor(month, year) { return { start: new Date(year, month - 1, WINDOW_START_DAY, 0, 0, 0), end: new Date(year, month, WINDOW_START_DAY, 23, 59, 59) }; }
-  // 20th → 19th cycle (e.g. Jun incentive = 20 Jun → 19 Jul). Used by Revival and 1k-5k.
+  // The incentive cycle: 20th of the month → 19th of the next (Jul incentive = 20 Jul → 19 Aug).
+  // ONE canonical definition, delegated to by every window below, so they cannot drift apart.
   function cycleWindowFor(month, year) { return { start: new Date(year, month - 1, WINDOW_START_DAY, 0, 0, 0), end: new Date(year, month, WINDOW_START_DAY - 1, 23, 59, 59) }; }
+  // Spend/Live, Task, WES and KAE strikes. Until 2026-08-26 this ended on the 20th at 23:59:59,
+  // one day later than the revival/1k-5k cycle — which put the 20th of the following month inside
+  // TWO consecutive windows, counting that day's activity in both cycles and measuring Inputs
+  // A/B/D over 32 days while Callback used 31. Now identical to cycleWindowFor.
+  function windowFor(month, year) { return cycleWindowFor(month, year); }
   const revivalWindowFor = cycleWindowFor;
   // Callback-within-SLA (Core GCs) cycle: standard 20th → 19th, EXCEPT Jun-2026 which is
   // measured 2 Jul → 19 Jul only — the policy was announced on 2 Jul 2026 (mid-cycle), so the

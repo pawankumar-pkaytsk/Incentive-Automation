@@ -23,7 +23,13 @@ description: How every HITS incentive is calculated — Core GC, Hypercare, KAE,
 **Cluster lead** (`p.cl`) comes from card 12101's `cl` — constant per GM, inherited by their GCs.
 
 ## Windows (deliberately not uniform)
-- Most metrics: **20th → 20th** (`windowFor`, `WINDOW_START_DAY = 20`)
+- **All metrics: 20th → 19th of the next month** (e.g. Jul incentive = 20 Jul → 19 Aug).
+  `cycleWindowFor` is the single canonical definition; `windowFor` (Spend/Live, Task, WES, KAE
+  strikes) and `revivalWindowFor` both delegate to it, so they cannot drift.
+  ⚠️ Until 2026-08-26 `windowFor` ended on the **20th**, one day later than the revival/1k-5k
+  cycle. That put the 20th of the following month inside two consecutive windows — counted in
+  both cycles — and measured Inputs A/B/D over 32 days while Callback used 31. Figures for
+  Inputs A, B, D and KAE strikes may differ slightly from exports taken before that date.
 - Revival + 1k-5k ARR/Spend-Live: **20th → 19th** (`cycleWindowFor`)
 - Callback-within-SLA: 20th→19th, **except Jun-2026 = 2 Jul → 19 Jul** (policy launched mid-cycle on 2 Jul; `callbackWindowFor`)
 - 1k-5k HIT2 achieved: **calendar month**
